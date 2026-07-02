@@ -12,8 +12,10 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.IdentityModel.Tokens;
-using System.Globalization;
+ using System.Globalization;
 using System.Text;
+ using Microsoft.OpenApi;
+
 
 namespace ADHD.Infrastructure.DI
 {
@@ -61,10 +63,43 @@ namespace ADHD.Infrastructure.DI
             services.AddScoped(typeof(IRepository<>), typeof(Repository<>));
             services.AddScoped<ADHD.Application.Interfaces.IEmailService, ADHD.Infrastructure.Services.EmailService>();
             services.AddHttpClient<ADHD.Application.Interfaces.IAnalysisService, ADHD.Infrastructure.Services.HuggingFaceAnalysisService>();
-
+            ConfigureSwaggerOptions(services);
             ConfigureLocalizationOptions(services);
 
             return services;
+        }
+
+        private static void ConfigureSwaggerOptions(IServiceCollection services)
+        {
+            services.AddSwaggerGen(c =>
+            {
+                c.SwaggerDoc("v1", new OpenApiInfo
+                {
+                    Version = "v1",
+                    Title = "ADHD",
+                    Description = "ASP.NET Core Web API"
+                });
+
+                c.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
+                {
+                    Name = "Authorization",
+                    Type = SecuritySchemeType.Http,
+                    Scheme = "Bearer",
+                    BearerFormat = "JWT",
+                    In = ParameterLocation.Header,
+                    Description = "JWT Authorization header using the Bearer scheme."
+                });
+
+                //c.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
+                //{
+                //    Name = "Authorization",
+                //    Type = SecuritySchemeType.Http,
+                //    Scheme = "Bearer",
+                //    BearerFormat = "JWT",
+                //    In = Microsoft.OpenApi.ParameterLocation.Header,
+                //    Description = "JWT Authorization header using the Bearer scheme."
+                //});
+            });
         }
 
         public static void UseSharedCulture(this IApplicationBuilder app)

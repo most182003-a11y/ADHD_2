@@ -11,8 +11,11 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddControllers();
 builder.Services.AddApplicationDI();
 builder.Services.AddInfrastructure(builder.Configuration);
+builder.Services.AddEndpointsApiExplorer();
+builder.Services.AddSwaggerGen();
+
 // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
-builder.Services.AddOpenApi();
+//builder.Services.AddOpenApi();
 
 var app = builder.Build();
 
@@ -22,10 +25,15 @@ app.UseExceptionHandlingMiddleware();
 app.UseRequestLocalization(app.Services.GetRequiredService<IOptions<RequestLocalizationOptions>>().Value);
 
 // Configure the HTTP request pipeline.
-if (app.Environment.IsDevelopment())
-{
-    app.MapOpenApi();
-}
+//if (app.Environment.IsDevelopment())
+//{
+//    app.MapOpenApi();
+//}
+
+ 
+    app.UseSwagger();
+    app.UseSwaggerUI();
+ 
 
 app.UseCors(policy => policy.AllowAnyOrigin().AllowAnyMethod().AllowAnyHeader());
 
@@ -58,7 +66,7 @@ using (var scope = app.Services.CreateScope())
         userManager.DeleteAsync(existingUser).GetAwaiter().GetResult();
         existingUser = null;
     }
-    
+
     if (existingUser == null)
     {
         var adminUser = new ADHD.Domain.Entities.Admin
