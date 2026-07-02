@@ -1,0 +1,8 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="ADHD.API/ADHD.API.csproj" Id="5e6e9e7a-5133-46d9-85ba-fb569c39c0a0" />
+    <Project Path="ADHD.Application/ADHD.Application.csproj" Id="84ea03fd-402c-46cb-aca2-28c505fd3e85" />
+    <Project Path="ADHD.Domain/ADHD.Domain.csproj" Id="d8498f9e-d2b9-4024-8552-8d0f77bc26d6" />
+    <Project Path="ADHD.Infrastructure/ADHD.Infrastructure.csproj" Id="8674b317-dd57-4e82-a6fc-c96f27061be8" />
+  </Folder>
+</Solution>
