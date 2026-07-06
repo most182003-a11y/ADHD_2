@@ -28,3 +28,27 @@
 [2026-07-02 22:58:49] GAVE UP /api/sessions/6198aedc-7471-4a1c-beda-911a58198fe8/mirror-me-trials after 3 attempts: 400 Client Error: Bad Request for url: http://localhost:5131/api/sessions/6198aedc-7471-4a1c-beda-911a58198fe8/mirror-me-trials
 [2026-07-02 22:58:49] OK /api/sessions/6198aedc-7471-4a1c-beda-911a58198fe8/summary (attempt 1) -> 200
 [2026-07-02 22:58:49] Summary saved for session 6198aedc-7471-4a1c-beda-911a58198fe8
+[2026-07-07 01:43:26] OK /api/sessions (attempt 1) -> 200
+[2026-07-07 01:43:26] Session created: 448137aa-5e9c-41dd-baf4-ee1541df14d6 (child=3075f64f-03e6-4506-a68a-ed4d9ad4aebe, game=mirror_me)
+[2026-07-07 01:43:27] OK /api/sessions/448137aa-5e9c-41dd-baf4-ee1541df14d6/mirror-me-trials (attempt 1) -> 200
+[2026-07-07 01:43:27] 2 Mirror Me trials saved to session 448137aa-5e9c-41dd-baf4-ee1541df14d6
+[2026-07-07 01:43:27] OK /api/sessions/448137aa-5e9c-41dd-baf4-ee1541df14d6/summary (attempt 1) -> 200
+[2026-07-07 01:43:27] Summary saved for session 448137aa-5e9c-41dd-baf4-ee1541df14d6
+[2026-07-07 01:43:27] OK /api/sessions (attempt 1) -> 200
+[2026-07-07 01:43:27] Session created: 3c37ede3-0dff-4f3d-ad0c-c6df6172bf8d (child=3075f64f-03e6-4506-a68a-ed4d9ad4aebe, game=green_light)
+[2026-07-07 01:43:27] OK /api/sessions/3c37ede3-0dff-4f3d-ad0c-c6df6172bf8d/green-light-trials (attempt 1) -> 200
+[2026-07-07 01:43:27] 2 Green Light trials saved to session 3c37ede3-0dff-4f3d-ad0c-c6df6172bf8d
+[2026-07-07 01:43:27] OK /api/sessions/3c37ede3-0dff-4f3d-ad0c-c6df6172bf8d/summary (attempt 1) -> 200
+[2026-07-07 01:43:27] Summary saved for session 3c37ede3-0dff-4f3d-ad0c-c6df6172bf8d
+[2026-07-07 01:43:27] OK /api/sessions (attempt 1) -> 200
+[2026-07-07 01:43:27] Session created: dec61688-c73d-44ea-bcf9-514ebc60e852 (child=3075f64f-03e6-4506-a68a-ed4d9ad4aebe, game=SimonMemory)
+[2026-07-07 01:43:27] OK /api/sessions/dec61688-c73d-44ea-bcf9-514ebc60e852/simon-trials (attempt 1) -> 200
+[2026-07-07 01:43:27] 1 Simon trials saved to session dec61688-c73d-44ea-bcf9-514ebc60e852
+[2026-07-07 01:43:27] OK /api/sessions/dec61688-c73d-44ea-bcf9-514ebc60e852/summary (attempt 1) -> 200
+[2026-07-07 01:43:27] Summary saved for session dec61688-c73d-44ea-bcf9-514ebc60e852
+[2026-07-07 01:43:27] OK /api/sessions (attempt 1) -> 200
+[2026-07-07 01:43:27] Session created: 114e5410-c044-4c43-8588-341b4979829d (child=3075f64f-03e6-4506-a68a-ed4d9ad4aebe, game=ReactionTime)
+[2026-07-07 01:43:27] OK /api/sessions/114e5410-c044-4c43-8588-341b4979829d/reaction-trials (attempt 1) -> 200
+[2026-07-07 01:43:27] 2 Reaction trials saved to session 114e5410-c044-4c43-8588-341b4979829d
+[2026-07-07 01:43:27] OK /api/sessions/114e5410-c044-4c43-8588-341b4979829d/summary (attempt 1) -> 200
+[2026-07-07 01:43:27] Summary saved for session 114e5410-c044-4c43-8588-341b4979829d

@@ -76,6 +76,22 @@ def save_green_light_trials(session_id, trials):
     return result
 
 
+def save_simon_trials(session_id, trials):
+    """Save Simon Memory trial results to an existing session."""
+    result = _post(f"/api/sessions/{session_id}/simon-trials", {"trials": trials})
+    if result and result.get("succeeded"):
+        _log(f"{len(trials)} Simon trials saved to session {session_id}")
+    return result
+
+
+def save_reaction_trials(session_id, trials):
+    """Save Reaction Time trial results to an existing session."""
+    result = _post(f"/api/sessions/{session_id}/reaction-trials", {"trials": trials})
+    if result and result.get("succeeded"):
+        _log(f"{len(trials)} Reaction trials saved to session {session_id}")
+    return result
+
+
 def save_summary(session_id, summary):
     """Save session summary (works for both game types)."""
     result = _post(f"/api/sessions/{session_id}/summary", summary)

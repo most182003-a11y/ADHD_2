@@ -1,0 +1,50 @@
+{
+  "gameType": "ReactionTime",
+  "startTime": "2026-07-07T14:20:15",
+  "numTrials": 15,
+  "trials": [
+    {
+      "trial": 1,
+      "targetLED": 2,
+      "delay": 2.346,
+      "result": "hit",
+      "pressedButton": 2,
+      "reactionTimeMs": 623.4,
+      "correct": true,
+      "impulsiveError": false
+    },
+    {
+      "trial": 2,
+      "targetLED": 5,
+      "delay": 3.871,
+      "result": "false_start",
+      "pressedButton": 5,
+      "reactionTimeMs": null,
+      "correct": false,
+      "impulsiveError": true
+    },
+    {
+      "trial": 3,
+      "targetLED": 0,
+      "delay": 1.654,
+      "result": "impulsive_error",
+      "pressedButton": 1,
+      "reactionTimeMs": 410.2,
+      "correct": false,
+      "impulsiveError": true
+    },
+    ...
+  ],
+  "summary": {
+    "totalTrials": 15,
+    "hits": 11,
+    "falseStarts": 2,
+    "misses": 1,
+    "impulsiveErrors": 1,
+    "wrongButtons": 0,
+    "averageReactionTimeMs": 587.6,
+    "reactionTimeStdDevMs": 95.3,
+    "impulsivityScore": 20.0,
+    "attentionScore": 73.3
+  }
+}

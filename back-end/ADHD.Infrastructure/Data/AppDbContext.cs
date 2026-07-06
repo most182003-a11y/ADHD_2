@@ -15,6 +15,8 @@ namespace ADHD.Infrastructure.Data
         public DbSet<GameSession> GameSessions { get; set; }
         public DbSet<MirrorMeTrial> MirrorMeTrials { get; set; }
         public DbSet<GreenLightTrial> GreenLightTrials { get; set; }
+        public DbSet<SimonTrial> SimonTrials { get; set; }
+        public DbSet<ReactionTrial> ReactionTrials { get; set; }
         public DbSet<SessionSummary> SessionSummaries { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -65,6 +67,16 @@ namespace ADHD.Infrastructure.Data
                     .HasForeignKey(t => t.SessionId)
                     .OnDelete(DeleteBehavior.Cascade);
 
+                entity.HasMany(e => e.SimonTrials)
+                    .WithOne(t => t.Session)
+                    .HasForeignKey(t => t.SessionId)
+                    .OnDelete(DeleteBehavior.Cascade);
+
+                entity.HasMany(e => e.ReactionTrials)
+                    .WithOne(t => t.Session)
+                    .HasForeignKey(t => t.SessionId)
+                    .OnDelete(DeleteBehavior.Cascade);
+
                 entity.HasOne(e => e.Summary)
                     .WithOne(s => s.Session)
                     .HasForeignKey<SessionSummary>(s => s.SessionId)
@@ -90,6 +102,26 @@ namespace ADHD.Infrastructure.Data
 
                 entity.HasOne(e => e.Session)
                     .WithMany(s => s.GreenLightTrials)
+                    .HasForeignKey(e => e.SessionId);
+            });
+
+            modelBuilder.Entity<SimonTrial>(entity =>
+            {
+                entity.ToTable("simon_trials");
+                entity.HasKey(e => e.Id);
+
+                entity.HasOne(e => e.Session)
+                    .WithMany(s => s.SimonTrials)
+                    .HasForeignKey(e => e.SessionId);
+            });
+
+            modelBuilder.Entity<ReactionTrial>(entity =>
+            {
+                entity.ToTable("reaction_trials");
+                entity.HasKey(e => e.Id);
+
+                entity.HasOne(e => e.Session)
+                    .WithMany(s => s.ReactionTrials)
                     .HasForeignKey(e => e.SessionId);
             });
 
