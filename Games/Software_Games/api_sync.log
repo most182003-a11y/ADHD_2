@@ -52,3 +52,27 @@
 [2026-07-07 01:43:27] 2 Reaction trials saved to session 114e5410-c044-4c43-8588-341b4979829d
 [2026-07-07 01:43:27] OK /api/sessions/114e5410-c044-4c43-8588-341b4979829d/summary (attempt 1) -> 200
 [2026-07-07 01:43:27] Summary saved for session 114e5410-c044-4c43-8588-341b4979829d
+[2026-07-07 01:59:53] OK /api/sessions (attempt 1) -> 200
+[2026-07-07 01:59:53] Session created: 625ed368-8ddd-4cb2-9aa9-fd3254567ac4 (child=3075f64f-03e6-4506-a68a-ed4d9ad4aebe, game=mirror_me)
+[2026-07-07 01:59:53] OK /api/sessions/625ed368-8ddd-4cb2-9aa9-fd3254567ac4/mirror-me-trials (attempt 1) -> 200
+[2026-07-07 01:59:53] 2 Mirror Me trials saved to session 625ed368-8ddd-4cb2-9aa9-fd3254567ac4
+[2026-07-07 01:59:53] OK /api/sessions/625ed368-8ddd-4cb2-9aa9-fd3254567ac4/summary (attempt 1) -> 200
+[2026-07-07 01:59:53] Summary saved for session 625ed368-8ddd-4cb2-9aa9-fd3254567ac4
+[2026-07-07 01:59:53] OK /api/sessions (attempt 1) -> 200
+[2026-07-07 01:59:53] Session created: 0d010cea-95f4-4e00-8a47-cfad692600cb (child=3075f64f-03e6-4506-a68a-ed4d9ad4aebe, game=green_light)
+[2026-07-07 01:59:53] OK /api/sessions/0d010cea-95f4-4e00-8a47-cfad692600cb/green-light-trials (attempt 1) -> 200
+[2026-07-07 01:59:53] 2 Green Light trials saved to session 0d010cea-95f4-4e00-8a47-cfad692600cb
+[2026-07-07 01:59:53] OK /api/sessions/0d010cea-95f4-4e00-8a47-cfad692600cb/summary (attempt 1) -> 200
+[2026-07-07 01:59:53] Summary saved for session 0d010cea-95f4-4e00-8a47-cfad692600cb
+[2026-07-07 01:59:53] OK /api/sessions (attempt 1) -> 200
+[2026-07-07 01:59:53] Session created: 7079e7c7-53be-485b-b055-adb3c74f6bd6 (child=3075f64f-03e6-4506-a68a-ed4d9ad4aebe, game=SimonMemory)
+[2026-07-07 01:59:54] OK /api/sessions/7079e7c7-53be-485b-b055-adb3c74f6bd6/simon-trials (attempt 1) -> 200
+[2026-07-07 01:59:54] 1 Simon trials saved to session 7079e7c7-53be-485b-b055-adb3c74f6bd6
+[2026-07-07 01:59:54] OK /api/sessions/7079e7c7-53be-485b-b055-adb3c74f6bd6/summary (attempt 1) -> 200
+[2026-07-07 01:59:54] Summary saved for session 7079e7c7-53be-485b-b055-adb3c74f6bd6
+[2026-07-07 01:59:54] OK /api/sessions (attempt 1) -> 200
+[2026-07-07 01:59:54] Session created: cc67af09-57b0-4d95-a5f9-aa35c6f81cc0 (child=3075f64f-03e6-4506-a68a-ed4d9ad4aebe, game=ReactionTime)
+[2026-07-07 01:59:54] OK /api/sessions/cc67af09-57b0-4d95-a5f9-aa35c6f81cc0/reaction-trials (attempt 1) -> 200
+[2026-07-07 01:59:54] 2 Reaction trials saved to session cc67af09-57b0-4d95-a5f9-aa35c6f81cc0
+[2026-07-07 01:59:54] OK /api/sessions/cc67af09-57b0-4d95-a5f9-aa35c6f81cc0/summary (attempt 1) -> 200
+[2026-07-07 01:59:54] Summary saved for session cc67af09-57b0-4d95-a5f9-aa35c6f81cc0
