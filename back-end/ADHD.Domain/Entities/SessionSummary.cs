@@ -16,5 +16,22 @@ namespace ADHD.Domain.Entities
         public int? FalseStartCount { get; set; }
         public double? AverageFreezeQuality { get; set; }
         public double? MovementIntensityOverall { get; set; }
+
+        // Simon Memory fields
+        public int? FinalLevel { get; set; }
+        public int? TotalCorrectSteps { get; set; }
+        public int? TotalSteps { get; set; }
+        public int? PrematurePressesDuringShow { get; set; }
+        public string? EndStatus { get; set; }
+
+        // Reaction Time fields
+        public int? Hits { get; set; }
+        public int? FalseStarts { get; set; }
+        public int? Misses { get; set; }
+        public int? ImpulsiveErrors { get; set; }
+        public int? WrongButtons { get; set; }
+        public double? ReactionTimeStdDevMs { get; set; }
+        public double? ImpulsivityScore { get; set; }
+        public double? AttentionScore { get; set; }
     }
 }

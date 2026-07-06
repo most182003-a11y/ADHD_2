@@ -12,6 +12,8 @@ namespace ADHD.Domain.Entities
 
         public ICollection<MirrorMeTrial> MirrorMeTrials { get; set; } = new List<MirrorMeTrial>();
         public ICollection<GreenLightTrial> GreenLightTrials { get; set; } = new List<GreenLightTrial>();
+        public ICollection<SimonTrial> SimonTrials { get; set; } = new List<SimonTrial>();
+        public ICollection<ReactionTrial> ReactionTrials { get; set; } = new List<ReactionTrial>();
         public SessionSummary? Summary { get; set; }
     }
 }
