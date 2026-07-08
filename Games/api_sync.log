@@ -22,3 +22,10 @@
 [2026-07-08 20:30:55] 2 Green Light trials saved to session b45e7037-ddff-44d8-9f0c-7579f9663664
 [2026-07-08 20:30:55] OK /api/sessions/b45e7037-ddff-44d8-9f0c-7579f9663664/summary (attempt 1) -> 200
 [2026-07-08 20:30:55] Summary saved for session b45e7037-ddff-44d8-9f0c-7579f9663664
+[2026-07-08 21:07:46] FAIL /api/sessions (attempt 1/3): HTTPConnectionPool(host='localhost', port=5131): Max retries exceeded with url: /api/sessions (Caused by NewConnectionError("HTTPConnection(host='localhost', port=5131): Failed to establish a new connection: [WinError 10061] No connection could be made because the target machine actively refused it"))
+[2026-07-08 21:07:48] OK /api/sessions (attempt 2) -> 200
+[2026-07-08 21:07:48] Session created: f659dc24-bf33-4073-8ebd-e618202b12b1 (child=0907cc85-427b-47b1-a445-151e99b14813, game=MirrorMe)
+[2026-07-08 21:07:48] OK /api/sessions/f659dc24-bf33-4073-8ebd-e618202b12b1/mirror-me-trials (attempt 1) -> 200
+[2026-07-08 21:07:48] 5 Mirror Me trials saved to session f659dc24-bf33-4073-8ebd-e618202b12b1
+[2026-07-08 21:07:49] OK /api/sessions/f659dc24-bf33-4073-8ebd-e618202b12b1/summary (attempt 1) -> 200
+[2026-07-08 21:07:49] Summary saved for session f659dc24-bf33-4073-8ebd-e618202b12b1

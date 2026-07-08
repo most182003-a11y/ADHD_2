@@ -169,6 +169,7 @@ def save_session_data(interrupted=False):
 
     total_denom = trials_played if trials_played > 0 else 1
     session["summary"] = {
+        "gameType": "ReactionTime",
         "totalTrials": trials_played,
         "hits": len(hits),
         "falseStarts": len(false_starts),
