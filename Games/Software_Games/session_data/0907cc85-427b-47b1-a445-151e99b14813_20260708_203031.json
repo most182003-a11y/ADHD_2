@@ -1,0 +1,38 @@
+{
+  "userId": "0907cc85-427b-47b1-a445-151e99b14813",
+  "sessionId": "20260708_203031",
+  "gameType": "RedLightGreenLight",
+  "timestamp": "2026-07-08T20:30:55.533733",
+  "previousSessionsCount": 0,
+  "trials": [
+    {
+      "trialIndex": 1,
+      "phase": "GreenLight",
+      "stopSignalDelayMs": 0,
+      "movementIntensity": 0.3648,
+      "transition": {
+        "stopReactionTimeMs": 65,
+        "freezeQuality": 19.2186,
+        "falseStart": true
+      }
+    },
+    {
+      "trialIndex": 2,
+      "phase": "GreenLight",
+      "stopSignalDelayMs": 0,
+      "movementIntensity": 0.4089,
+      "transition": {
+        "stopReactionTimeMs": 69,
+        "freezeQuality": 86.6165,
+        "falseStart": true
+      }
+    }
+  ],
+  "sessionSummary": {
+    "averageStopReactionTimeMs": 67.0,
+    "falseStartCount": 2,
+    "averageFreezeQuality": 52.9176,
+    "movementIntensityOverall": 0.3869,
+    "totalTrials": 2
+  }
+}

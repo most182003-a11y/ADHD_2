@@ -8,10 +8,6 @@ _games_dir = os.path.dirname(_script_dir)  # Games/
 for _p in (_script_dir, _games_dir):
     if _p not in sys.path:
         sys.path.insert(0, _p)
-# Primary: resolve modules from Software_Games (backend_api, pose_engine, database)
-for _p in (_script_dir, _games_dir):
-    if _p not in sys.path:
-        sys.path.insert(0, _p)
 
 os.environ["OPENBLAS_NUM_THREADS"] = "1"
 os.environ["OMP_NUM_THREADS"] = "1"
@@ -24,79 +20,16 @@ import pygame
 import time
 import random
 import uuid
+import json
 from pose_engine import PoseEngine
+from ui_utils import draw_glass_panel, draw_glowing_circle, COLORS, COLOR_DARK, COLOR_SLATE, COLOR_INDIGO, COLOR_LIGHT_INDIGO, COLOR_EMERALD, COLOR_ROSE, COLOR_AMBER, COLOR_WHITE, COLOR_GRAY
 from datetime import datetime
-from database import GameDatabase
-from backend_api import create_session, save_mirror_me_trials, save_summary
 
-# Get asset directory (Games/assets)
 SCRIPT_DIR = _script_dir
-ASSETS_DIR = os.path.join(_games_dir, "assets")
+ASSETS_DIR = os.path.join(_script_dir, "assets")
 
-# Initialize Pygame for sound
 pygame.init()
 pygame.mixer.init()
-
-# Visual Constants
-# BGR Color Palette (OpenCV BGR Format)
-COLOR_DARK = (10, 10, 10)
-COLOR_SLATE = (59, 41, 30)
-COLOR_INDIGO = (241, 102, 99)       # Primary Accent Indigo
-COLOR_LIGHT_INDIGO = (248, 140, 129) # Hover Accent
-COLOR_EMERALD = (129, 185, 16)      # Safe Green Light Color
-COLOR_ROSE = (94, 63, 244)          # Danger Red Light Color
-COLOR_AMBER = (11, 158, 245)         # Warning Amber Color
-COLOR_WHITE = (255, 255, 255)
-COLOR_GRAY = (200, 200, 200)
-
-COLORS = {
-    'background': COLOR_DARK,
-    'text': COLOR_WHITE,
-    'success': COLOR_EMERALD,
-    'warning': COLOR_AMBER,
-    'error': COLOR_ROSE,
-    'accent': COLOR_INDIGO,
-    'button_idle': COLOR_SLATE,
-    'button_hover': COLOR_LIGHT_INDIGO,
-    'button_active': COLOR_INDIGO,
-    'overlay': (10, 10, 10, 160)
-}
-
-def draw_glass_panel(img, x, y, w, h, bg_color=(20, 20, 20), border_color=COLOR_INDIGO, alpha=0.45, border_thickness=1, corner_radius=15):
-    """Draws a beautiful semi-transparent glass panel with rounded corners and a border"""
-    overlay = img.copy()
-    r = corner_radius
-    
-    # Draw rounded rectangle on overlay
-    cv2.circle(overlay, (x + r, y + r), r, bg_color, -1)
-    cv2.circle(overlay, (x + w - r, y + r), r, bg_color, -1)
-    cv2.circle(overlay, (x + r, y + h - r), r, bg_color, -1)
-    cv2.circle(overlay, (x + w - r, y + h - r), r, bg_color, -1)
-    cv2.rectangle(overlay, (x + r, y), (x + w - r, y + h), bg_color, -1)
-    cv2.rectangle(overlay, (x, y + r), (x + w, y + h - r), bg_color, -1)
-    
-    # Apply alpha transparency
-    cv2.addWeighted(overlay, alpha, img, 1 - alpha, 0, img)
-    
-    # Draw border on frame with anti-aliasing
-    cv2.ellipse(img, (x + r, y + r), (r, r), 180, 0, 90, border_color, border_thickness, cv2.LINE_AA)
-    cv2.ellipse(img, (x + w - r, y + r), (r, r), 270, 0, 90, border_color, border_thickness, cv2.LINE_AA)
-    cv2.ellipse(img, (x + w - r, y + h - r), (r, r), 0, 0, 90, border_color, border_thickness, cv2.LINE_AA)
-    cv2.ellipse(img, (x + r, y + h - r), (r, r), 90, 0, 90, border_color, border_thickness, cv2.LINE_AA)
-    
-    cv2.line(img, (x + r, y), (x + w - r, y), border_color, border_thickness, cv2.LINE_AA)
-    cv2.line(img, (x + w, y + r), (x + w, y + h - r), border_color, border_thickness, cv2.LINE_AA)
-    cv2.line(img, (x + r, y + h), (x + w - r, y + h), border_color, border_thickness, cv2.LINE_AA)
-    cv2.line(img, (x, y + r), (x, y + h - r), border_color, border_thickness, cv2.LINE_AA)
-
-def draw_glowing_circle(img, center, radius, color, thickness=2, glow_factor=3):
-    """Draws a circular element with a smooth glowing outer ring"""
-    for i in range(glow_factor, 0, -1):
-        alpha = 0.15 / i
-        overlay = img.copy()
-        cv2.circle(overlay, center, radius + i*3, color, thickness + i*2, cv2.LINE_AA)
-        cv2.addWeighted(overlay, alpha, img, 1 - alpha, 0, img)
-    cv2.circle(img, center, radius, color, thickness, cv2.LINE_AA)
 
 class Button:
     def __init__(self, x, y, w, h, text, callback_val=None, color=COLORS['button_idle'], hover_color=COLORS['button_hover']):
@@ -180,8 +113,9 @@ MEDIUM_MOVEMENTS = [
 HARD_MOVEMENTS = [
     "Archer Pose",
     "The Surfer",
-    "Crouching Tiger",
+    "Flying Starfish",
     "Tree Pose",
+    "The Flamingo",
     "Arms Forming a Circle"
 ]
 
@@ -190,49 +124,52 @@ MOVEMENTS = EASY_MOVEMENTS # Default
 class MirrorMeGame:
     def __init__(self, child_id="CHILD001"):
         self.cap = self._init_camera()
-        self.engine = PoseEngine()
-        self.db = GameDatabase()
+        self.engine = PoseEngine(model_complexity=1)
+        self.target_resolution = (640, 480)
         self.child_id = child_id
         self.session_id = str(uuid.uuid4())[:8]
         self.game_start_timestamp = time.time()
         
         self.state = "CALIBRATION"
         self.round_number = 0
-        self.total_rounds = 10
+        self.total_rounds = 5
         self.score = 0
-        self.mirror_video = True # Default to mirror mode
+        self.mirror_video = True
         
         self.mouse_pos = (0, 0)
         self.mouse_clicked = False
         self.buttons = []
         self.state_init = None
-        # cv2.namedWindow("Mirror Me") # Handled by Tkinter
-        # cv2.setMouseCallback("Mirror Me", self._mouse_callback)
         
         self.available_movements = EASY_MOVEMENTS
+        self.session_movements = list(self.available_movements)
+        random.shuffle(self.session_movements)
         self.current_movement = None
         self.start_time = 0
         self.hold_start_time = 0
-        self.hold_duration_required = 2.0 # Default
+        self.hold_duration_required = 2.0
         
         self.last_feedback = ""
         self.feedback_color = COLORS['text']
         self.feedback_timer = 0
         
-        self.stats = [] # Store results for final summary
-        self.trial_results = [] # Agent-Request-style per-trial data
+        self.stats = []
+        self.trial_results = []
         self.round_attention_frames = 0
         self.round_total_frames = 0
         
-        # Difficulty Settings
         self.difficulties = {
-            'EASY': {'timeout': 10.0, 'hold': 1.5, 'desc': 'Easy: Relaxed pace'},
-            'MEDIUM': {'timeout': 7.0, 'hold': 2.5, 'desc': 'Medium: Standard challenge'},
-            'HARD': {'timeout': 5.0, 'hold': 4.0, 'desc': 'Hard: Pro reflection'}
+            'EASY': {'timeout': 5.0, 'hold': 5.0, 'desc': 'Easy: Relaxed pace'},
+            'MEDIUM': {'timeout': 7.5, 'hold': 3.5, 'desc': 'Medium: Standard challenge'},
+            'HARD': {'timeout': 10.0, 'hold': 2.5, 'desc': 'Hard: Pro reflection'}
         }
-        self.difficulty = 'MEDIUM' # Default
+        self.difficulty = 'MEDIUM'
         
         self.total_reaction_time = 0
+        self.frame_count = 0
+        self.process_every_n_frames = 2
+        self.last_processed_landmarks = None
+        self.last_processed_raw = None
         
         self.reset_stats()
         self._load_current_ref_images()
@@ -250,6 +187,9 @@ class MirrorMeGame:
                 cap.release()
         print("[Camera] No working camera found. Using fallback (index 0).")
         cap = cv2.VideoCapture(0, cv2.CAP_DSHOW)
+        if not cap.isOpened():
+            print("[CRITICAL] Camera failed to open. Please check connection.")
+            sys.exit(1)
         return cap
 
     def reset_stats(self):
@@ -276,6 +216,8 @@ class MirrorMeGame:
         self.session_saved = False
         self.state_init = None
         self.current_movement = None
+        self.session_movements = list(self.available_movements)
+        random.shuffle(self.session_movements)
 
         
         # Load reference images
@@ -294,21 +236,32 @@ class MirrorMeGame:
             "Archer Pose": os.path.join(ASSETS_DIR, "archer.png"),
             "The Surfer": os.path.join(ASSETS_DIR, "surfer.png"),
             "The Flamingo": os.path.join(ASSETS_DIR, "flamingo.png"),
-            "Crouching Tiger": os.path.join(ASSETS_DIR, "tiger.png"),
+            "Flying Starfish": os.path.join(ASSETS_DIR, "flying_starfish.png"),
             "Tree Pose": os.path.join(ASSETS_DIR, "tree_pose.png"),
             "Arms Forming a Circle": os.path.join(ASSETS_DIR, "circle_arms.png")
         }
         self._load_current_ref_images()
 
     def _load_current_ref_images(self):
-        """Loads reference images for the current movement set."""
         self.ref_images = {}
+        assets_exist = os.path.isdir(ASSETS_DIR)
         for move in self.available_movements:
             path = self.img_mapping.get(move)
-            if path:
+            if path and assets_exist:
                 img = cv2.imread(path)
                 if img is not None:
                     self.ref_images[move] = cv2.resize(img, (200, 200))
+                    continue
+            ref = np.zeros((200, 200, 3), dtype=np.uint8)
+            ref[:] = (20, 20, 20)
+            words = move.split()
+            y = 40
+            for word in words[:3]:
+                cv2.putText(ref, word, (10, y), cv2.FONT_HERSHEY_SIMPLEX, 0.4, COLOR_INDIGO, 1, cv2.LINE_AA)
+                y += 25
+            cv2.putText(ref, "No Image", (30, 160), cv2.FONT_HERSHEY_SIMPLEX, 0.35, COLOR_GRAY, 1, cv2.LINE_AA)
+            cv2.rectangle(ref, (0, 0), (199, 199), COLOR_SLATE, 1)
+            self.ref_images[move] = ref
 
     def _show_camera_error(self):
         """Creates an error frame when camera is unavailable."""
@@ -322,24 +275,34 @@ class MirrorMeGame:
         return frame
 
     def update(self):
-        """Single update step, returns the frame to display."""
         ret, frame = self.cap.read()
         if not ret:
             return self._show_camera_error()
-        
-        frame = cv2.resize(frame, (1280, 720)) # Resize to HD resolution
+
+        frame = cv2.resize(frame, self.target_resolution)
+        display_frame = cv2.resize(frame, (1280, 720))
         if self.mirror_video:
             frame = cv2.flip(frame, 1)
-        h, w, _ = frame.shape
-        
-        smoothed_lms, raw_lms = self.engine.process_frame(frame, mirrored=self.mirror_video)
-        
+            display_frame = cv2.flip(display_frame, 1)
+
+        self.frame_count += 1
+        process_this = (self.frame_count % self.process_every_n_frames == 0)
+
+        if process_this:
+            smoothed_lms, raw_lms = self.engine.process_frame(frame, mirrored=self.mirror_video)
+            if smoothed_lms is not None:
+                self.last_processed_landmarks = smoothed_lms
+                self.last_processed_raw = raw_lms
+        else:
+            smoothed_lms = self.last_processed_landmarks
+            raw_lms = self.last_processed_raw
+
         if self.state == "CALIBRATION":
-            self._handle_calibration(frame, smoothed_lms)
+            self._handle_calibration(display_frame, smoothed_lms)
         elif self.state == "DIFFICULTY":
-            self._handle_difficulty_selection(frame, smoothed_lms)
+            self._handle_difficulty_selection(display_frame, smoothed_lms)
         elif self.state == "HOLD_SELECTION":
-            self._handle_hold_selection(frame, smoothed_lms)
+            self._handle_hold_selection(display_frame, smoothed_lms)
         elif self.state == "INSTRUCTION":
             self._handle_instruction()
         elif self.state == "TRACKING":
@@ -347,15 +310,12 @@ class MirrorMeGame:
         elif self.state == "FEEDBACK":
             self._handle_feedback()
         elif self.state == "SUMMARY":
-            self._handle_summary(frame, smoothed_lms)
-            return frame # Show summary frame
+            self._handle_summary(display_frame, smoothed_lms)
+            return display_frame
 
-        # Reset click for next frame
         self.mouse_clicked = False
-
-        # Drawing
-        self._draw_ui(frame, raw_lms)
-        return frame
+        self._draw_ui(display_frame, raw_lms)
+        return display_frame
 
     def restart(self):
         """Restarts the game stats."""
@@ -452,6 +412,8 @@ class MirrorMeGame:
                     'MEDIUM': MEDIUM_MOVEMENTS,
                     'HARD': HARD_MOVEMENTS
                 }[self.difficulty]
+                self.session_movements = list(self.available_movements)
+                random.shuffle(self.session_movements)
                 self.hold_duration_required = self.difficulties[self.difficulty]['hold']
                 self.state = "HOLD_SELECTION"
                 self.buttons = [] # Clear for next state
@@ -508,7 +470,10 @@ class MirrorMeGame:
 
     def _handle_instruction(self):
         if self.current_movement is None:
-            self.current_movement = random.choice(self.available_movements)
+            if self.round_number < len(self.session_movements):
+                self.current_movement = self.session_movements[self.round_number]
+            else:
+                self.current_movement = random.choice(self.available_movements)
             self.start_time = time.time()
             self.last_feedback = f"Get Ready: {self.current_movement}"
             self.feedback_color = COLORS['text']
@@ -518,8 +483,7 @@ class MirrorMeGame:
         # We'll check this once near the end of the instruction phase
         instruction_elapsed = time.time() - self.start_time
         if 1.5 < instruction_elapsed < 2.0 and not self.already_doing_pose:
-            # Check if they are already doing the pose (passing a "virtual" mirrored state)
-            # We briefly peek at the engine's last landmarks
+            # Check if they are already doing the pose (passing the active mirrored state)
             last_lms = self.engine.history[-1] if self.engine.history else None
             correct, _ = self.engine.get_movement_check(self.current_movement, last_lms, mirrored=self.mirror_video)
             if correct:
@@ -545,68 +509,372 @@ class MirrorMeGame:
             l_elbow = landmarks[14] if m else landmarks[13]
             r_elbow = landmarks[13] if m else landmarks[14]
             nose = landmarks[0]
+            
+            thresh = 0.15
+
+            # Calculate shoulder distance to normalize movement thresholds (scale-invariant)
+            shoulder_dist = np.linalg.norm(l_shldr[:2] - r_shldr[:2])
+            if shoulder_dist < 0.05:
+                shoulder_dist = 0.2
 
             if movement == "Raise Right Hand":
+                # Check right arm angle
                 ang = np.degrees(PoseEngine.angle_between(r_shldr, r_elbow, r_wrist))
-                score = (1.0 - min(ang / 90.0, 1.0)) * 0.6
-                score += 0.4 if r_wrist[1] < r_shldr[1] - 0.1 else 0.0
-                return min(score, 1.0)
+                # Map angle from [80, 160] to [0, 1]
+                ang_score = min(max((ang - 80) / 80.0, 0.0), 1.0)
+                
+                # Check right wrist height above shoulder
+                height_diff = r_shldr[1] - r_wrist[1]
+                min_diff = 0.0
+                target_diff = 1.0 * shoulder_dist
+                if height_diff <= min_diff:
+                    height_score = 0.0
+                elif height_diff >= target_diff:
+                    height_score = 1.0
+                else:
+                    height_score = (height_diff - min_diff) / (target_diff - min_diff)
+                
+                # Check left hand is down (if visible)
+                left_penalty = 1.0
+                if l_wrist[3] >= thresh:
+                    if l_wrist[1] < l_shldr[1]:
+                        lh_diff = l_shldr[1] - l_wrist[1]
+                        left_penalty = max(0.0, 1.0 - (lh_diff / (1.0 * shoulder_dist)))
+                
+                score = (0.5 * ang_score + 0.5 * height_score) * left_penalty
+                return min(max(score, 0.0), 1.0)
+
             elif movement == "Raise Left Hand":
+                # Check left arm angle
                 ang = np.degrees(PoseEngine.angle_between(l_shldr, l_elbow, l_wrist))
-                score = (1.0 - min(ang / 90.0, 1.0)) * 0.6
-                score += 0.4 if l_wrist[1] < l_shldr[1] - 0.1 else 0.0
-                return min(score, 1.0)
+                # Map angle from [80, 160] to [0, 1]
+                ang_score = min(max((ang - 80) / 80.0, 0.0), 1.0)
+                
+                # Check left wrist height above shoulder
+                height_diff = l_shldr[1] - l_wrist[1]
+                min_diff = 0.0
+                target_diff = 1.0 * shoulder_dist
+                if height_diff <= min_diff:
+                    height_score = 0.0
+                elif height_diff >= target_diff:
+                    height_score = 1.0
+                else:
+                    height_score = (height_diff - min_diff) / (target_diff - min_diff)
+                
+                # Check right hand is down (if visible)
+                right_penalty = 1.0
+                if r_wrist[3] >= thresh:
+                    if r_wrist[1] < r_shldr[1]:
+                        rh_diff = r_shldr[1] - r_wrist[1]
+                        right_penalty = max(0.0, 1.0 - (rh_diff / (1.0 * shoulder_dist)))
+                
+                score = (0.5 * ang_score + 0.5 * height_score) * right_penalty
+                return min(max(score, 0.0), 1.0)
+
             elif movement == "Hands on Hips":
-                dl = np.linalg.norm(l_wrist[:2] - landmarks[24 if m else 23][:2])
-                dr = np.linalg.norm(r_wrist[:2] - landmarks[23 if m else 24][:2])
-                score = (1.0 - min(dl / 0.3, 1.0)) * 0.5 + (1.0 - min(dr / 0.3, 1.0)) * 0.5
-                return max(0.0, score)
+                l_hip = landmarks[24 if m else 23]
+                r_hip = landmarks[23 if m else 24]
+                
+                if l_wrist[3] < thresh or r_wrist[3] < thresh or l_hip[3] < thresh or r_hip[3] < thresh:
+                    return 0.0
+                
+                dl = np.linalg.norm(l_wrist[:2] - l_hip[:2])
+                dr = np.linalg.norm(r_wrist[:2] - r_hip[:2])
+                
+                min_dist = 0.5 * shoulder_dist
+                max_dist = 1.8 * shoulder_dist
+                
+                def get_dist_score(d):
+                    if d <= min_dist:
+                        return 1.0
+                    elif d >= max_dist:
+                        return 0.0
+                    else:
+                        return (max_dist - d) / (max_dist - min_dist)
+                
+                score_l = get_dist_score(dl)
+                score_r = get_dist_score(dr)
+                
+                height_penalty = 1.0
+                if l_wrist[1] < l_shldr[1] or r_wrist[1] < r_shldr[1]:
+                    height_penalty = 0.5
+                
+                return min(max((score_l * 0.5 + score_r * 0.5) * height_penalty, 0.0), 1.0)
+
             elif movement == "Touch Knees":
-                dl = np.linalg.norm(l_wrist[:2] - landmarks[26 if m else 25][:2])
-                dr = np.linalg.norm(r_wrist[:2] - landmarks[25 if m else 26][:2])
-                score = (1.0 - min(dl / 0.2, 1.0)) * 0.5 + (1.0 - min(dr / 0.2, 1.0)) * 0.5
-                return max(0.0, score)
+                l_knee = landmarks[26 if m else 25]
+                r_knee = landmarks[25 if m else 26]
+                l_hip = landmarks[24 if m else 23]
+                r_hip = landmarks[23 if m else 24]
+                
+                if l_wrist[3] < thresh or r_wrist[3] < thresh:
+                    return 0.0
+                
+                if l_knee[3] >= thresh and r_knee[3] >= thresh:
+                    dl = np.linalg.norm(l_wrist[:2] - l_knee[:2])
+                    dr = np.linalg.norm(r_wrist[:2] - r_knee[:2])
+                    min_dist = 0.6 * shoulder_dist
+                    max_dist = 2.0 * shoulder_dist
+                    
+                    def get_knee_score(d):
+                        if d <= min_dist:
+                            return 1.0
+                        elif d >= max_dist:
+                            return 0.0
+                        else:
+                            return (max_dist - d) / (max_dist - min_dist)
+                    
+                    score = get_knee_score(dl) * 0.5 + get_knee_score(dr) * 0.5
+                elif l_hip[3] >= thresh and r_hip[3] >= thresh:
+                    diff_l = l_wrist[1] - l_hip[1]
+                    diff_r = r_wrist[1] - r_hip[1]
+                    target_diff = 0.8 * shoulder_dist
+                    score_l = min(max(diff_l / target_diff, 0.0), 1.0)
+                    score_r = min(max(diff_r / target_diff, 0.0), 1.0)
+                    score = score_l * 0.5 + score_r * 0.5
+                else:
+                    diff_l = l_wrist[1] - l_shldr[1]
+                    diff_r = r_wrist[1] - r_shldr[1]
+                    target_diff = 1.8 * shoulder_dist
+                    score_l = min(max(diff_l / target_diff, 0.0), 1.0)
+                    score_r = min(max(diff_r / target_diff, 0.0), 1.0)
+                    score = score_l * 0.5 + score_r * 0.5
+                    
+                return min(max(score, 0.0), 1.0)
+
             elif movement == "Put Hand Above Head":
-                r_up = max(0, 1.0 - (r_wrist[1] / nose[1]) * 2) if nose[1] > 0 else 0
-                l_up = max(0, 1.0 - (l_wrist[1] / nose[1]) * 2) if nose[1] > 0 else 0
-                return max(r_up, l_up)
+                y_ref = min(l_shldr[1], r_shldr[1])
+                y_target = min(nose[1] - 0.08, y_ref - 1.3 * shoulder_dist)
+                
+                scores = []
+                for wrist in [l_wrist, r_wrist]:
+                    if wrist[3] < thresh:
+                        scores.append(0.0)
+                        continue
+                    if wrist[1] <= y_target:
+                        scores.append(1.0)
+                    elif wrist[1] >= y_ref:
+                        scores.append(0.0)
+                    else:
+                        scores.append((y_ref - wrist[1]) / (y_ref - y_target))
+                return max(scores) if scores else 0.0
+
             elif movement == "Raise Both Hands":
                 la = np.degrees(PoseEngine.angle_between(l_shldr, l_elbow, l_wrist))
+                la_score = min(max((la - 80) / 80.0, 0.0), 1.0)
+                
                 ra = np.degrees(PoseEngine.angle_between(r_shldr, r_elbow, r_wrist))
-                score = (1.0 - min(la / 90.0, 1.0)) * 0.3 + (1.0 - min(ra / 90.0, 1.0)) * 0.3
-                score += 0.2 if l_wrist[1] < l_shldr[1] - 0.1 else 0.0
-                score += 0.2 if r_wrist[1] < r_shldr[1] - 0.1 else 0.0
-                return min(score, 1.0)
+                ra_score = min(max((ra - 80) / 80.0, 0.0), 1.0)
+                
+                target_diff = 1.0 * shoulder_dist
+                lh_diff = l_shldr[1] - l_wrist[1]
+                rh_diff = r_shldr[1] - r_wrist[1]
+                
+                lh_score = min(max(lh_diff / target_diff, 0.0), 1.0) if l_wrist[3] >= thresh else 0.0
+                rh_score = min(max(rh_diff / target_diff, 0.0), 1.0) if r_wrist[3] >= thresh else 0.0
+                
+                score = (la_score * 0.25 + ra_score * 0.25 + lh_score * 0.25 + rh_score * 0.25)
+                return min(max(score, 0.0), 1.0)
+
             elif movement == "Cross Arms on Chest":
+                if l_wrist[3] < thresh or r_wrist[3] < thresh:
+                    return 0.0
+                
                 dl = np.linalg.norm(l_wrist[:2] - r_shldr[:2])
                 dr = np.linalg.norm(r_wrist[:2] - l_shldr[:2])
-                score = (1.0 - min(dl / 0.3, 1.0)) * 0.5 + (1.0 - min(dr / 0.3, 1.0)) * 0.5
-                return max(0.0, score)
+                
+                min_dist = 0.4 * shoulder_dist
+                max_dist = 1.5 * shoulder_dist
+                
+                def get_cross_score(d):
+                    if d <= min_dist:
+                        return 1.0
+                    elif d >= max_dist:
+                        return 0.0
+                    else:
+                        return (max_dist - d) / (max_dist - min_dist)
+                
+                score = get_cross_score(dl) * 0.5 + get_cross_score(dr) * 0.5
+                return min(max(score, 0.0), 1.0)
+
             elif movement == "Arms Out to Sides":
+                if l_wrist[3] < thresh or r_wrist[3] < thresh:
+                    return 0.0
+                
                 sl = abs(l_wrist[0] - l_shldr[0])
                 sr = abs(r_wrist[0] - r_shldr[0])
-                score = min(sl / 0.4, 1.0) * 0.5 + min(sr / 0.4, 1.0) * 0.5
-                return max(0.0, score)
+                
+                target_ext = 1.2 * shoulder_dist
+                min_ext = 0.4 * shoulder_dist
+                
+                def get_ext_score(ext):
+                    if ext >= target_ext:
+                        return 1.0
+                    elif ext <= min_ext:
+                        return 0.0
+                    else:
+                        return (ext - min_ext) / (target_ext - min_ext)
+                
+                align_l = max(0.0, 1.0 - abs(l_wrist[1] - l_shldr[1]) / (0.8 * shoulder_dist))
+                align_r = max(0.0, 1.0 - abs(r_wrist[1] - r_shldr[1]) / (0.8 * shoulder_dist))
+                
+                score_l = get_ext_score(sl) * 0.7 + align_l * 0.3
+                score_r = get_ext_score(sr) * 0.7 + align_r * 0.3
+                
+                return min(max(score_l * 0.5 + score_r * 0.5, 0.0), 1.0)
+
             elif movement == "Flex Muscles":
-                elbows_out = (1.0 - min(abs(l_shldr[1] - l_elbow[1]) / 0.15, 1.0)) * 0.5
-                wrists_up = (1.0 - min(abs(l_wrist[1] - l_elbow[1]) / 0.15, 1.0)) * 0.5
-                return elbows_out + wrists_up
+                if l_wrist[3] < thresh or r_wrist[3] < thresh or l_elbow[3] < thresh or r_elbow[3] < thresh:
+                    return 0.0
+                
+                el_diff = abs(l_shldr[1] - l_elbow[1])
+                er_diff = abs(r_shldr[1] - r_elbow[1])
+                el_score = max(0.0, 1.0 - el_diff / (0.8 * shoulder_dist))
+                er_score = max(0.0, 1.0 - er_diff / (0.8 * shoulder_dist))
+                
+                wl_diff = l_elbow[1] - l_wrist[1]
+                wr_diff = r_elbow[1] - r_wrist[1]
+                target_up = 0.6 * shoulder_dist
+                wl_score = min(max(wl_diff / target_up, 0.0), 1.0)
+                wr_score = min(max(wr_diff / target_up, 0.0), 1.0)
+                
+                score_l = el_score * 0.5 + wl_score * 0.5
+                score_r = er_score * 0.5 + wr_score * 0.5
+                return min(max(score_l * 0.5 + score_r * 0.5, 0.0), 1.0)
+
             elif movement == "One Hand Up, One Hand on Hip":
-                rh_up = max(0, 1.0 - r_wrist[1] / r_shldr[1]) if r_shldr[1] > 0 else 0
-                lh_hip = max(0, 1.0 - np.linalg.norm(l_wrist[:2] - landmarks[24 if m else 23][:2]) / 0.3)
-                lh_up = max(0, 1.0 - l_wrist[1] / l_shldr[1]) if l_shldr[1] > 0 else 0
-                rh_hip = max(0, 1.0 - np.linalg.norm(r_wrist[:2] - landmarks[23 if m else 24][:2]) / 0.3)
-                return max(rh_up * 0.5 + lh_hip * 0.5, lh_up * 0.5 + rh_hip * 0.5)
+                l_hip = landmarks[24 if m else 23]
+                r_hip = landmarks[23 if m else 24]
+                
+                def hand_up_score(wrist, shldr, elbow):
+                    if wrist[3] < thresh: return 0.0
+                    ang = np.degrees(PoseEngine.angle_between(shldr, elbow, wrist))
+                    ang_score = min(max((ang - 80) / 80.0, 0.0), 1.0)
+                    height_diff = shldr[1] - wrist[1]
+                    target_diff = 1.0 * shoulder_dist
+                    h_score = min(max(height_diff / target_diff, 0.0), 1.0)
+                    return ang_score * 0.5 + h_score * 0.5
+                
+                def hand_hip_score(wrist, hip, shldr):
+                    if wrist[3] < thresh or hip[3] < thresh: return 0.0
+                    d = np.linalg.norm(wrist[:2] - hip[:2])
+                    min_d = 0.5 * shoulder_dist
+                    max_d = 1.8 * shoulder_dist
+                    d_score = 1.0 if d <= min_d else (0.0 if d >= max_d else (max_d - d) / (max_d - min_d))
+                    height_penalty = 1.0 if wrist[1] > shldr[1] else 0.5
+                    return d_score * height_penalty
+                
+                score_a = hand_up_score(l_wrist, l_shldr, l_elbow) * 0.5 + hand_hip_score(r_wrist, r_hip, r_shldr) * 0.5
+                score_b = hand_up_score(r_wrist, r_shldr, r_elbow) * 0.5 + hand_hip_score(l_wrist, l_hip, l_shldr) * 0.5
+                return min(max(max(score_a, score_b), 0.0), 1.0)
+
             elif movement == "Archer Pose":
-                r_arm_forward = max(0, 1.0 - abs(r_wrist[0] - r_shldr[0]) / 0.4)
-                l_ear_dist = max(0, 1.0 - np.linalg.norm(l_wrist[:2] - landmarks[8 if m else 7][:2]) / 0.3)
-                l_arm_forward = max(0, 1.0 - abs(l_wrist[0] - l_shldr[0]) / 0.4)
-                r_ear_dist = max(0, 1.0 - np.linalg.norm(r_wrist[:2] - landmarks[7 if m else 8][:2]) / 0.3)
-                return max(r_arm_forward * 0.5 + l_ear_dist * 0.5, l_arm_forward * 0.5 + r_ear_dist * 0.5)
+                l_ear = landmarks[8 if m else 7]
+                r_ear = landmarks[7 if m else 8]
+                
+                def get_config_score(fwd_wrist, fwd_shldr, back_wrist, back_ear):
+                    if fwd_wrist[3] < thresh or back_wrist[3] < thresh: return 0.0
+                    fwd_dist = abs(fwd_wrist[0] - fwd_shldr[0])
+                    min_ext = 0.5 * shoulder_dist
+                    target_ext = 1.2 * shoulder_dist
+                    fwd_score = min(max((fwd_dist - min_ext) / (target_ext - min_ext), 0.0), 1.0)
+                    
+                    ear_dist = np.linalg.norm(back_wrist[:2] - back_ear[:2])
+                    min_d = 0.4 * shoulder_dist
+                    max_d = 1.5 * shoulder_dist
+                    back_score = 1.0 if ear_dist <= min_d else (0.0 if ear_dist >= max_d else (max_d - ear_dist) / (max_d - min_d))
+                    return fwd_score * 0.5 + back_score * 0.5
+                
+                score_1 = get_config_score(r_wrist, r_shldr, l_wrist, l_ear)
+                score_2 = get_config_score(l_wrist, l_shldr, r_wrist, r_ear)
+                return min(max(max(score_1, score_2), 0.0), 1.0)
+
             elif movement == "Arms Forming a Circle":
-                both_up = (1.0 - min(r_wrist[1] / nose[1], 1.0)) * 0.4 + (1.0 - min(l_wrist[1] / nose[1], 1.0)) * 0.4
-                hands_close = max(0, 1.0 - np.linalg.norm(l_wrist[:2] - r_wrist[:2]) / 0.3) * 0.2
-                return both_up + hands_close
+                y_ref = min(l_shldr[1], r_shldr[1])
+                target_up = 1.2 * shoulder_dist
+                lh_diff = y_ref - l_wrist[1]
+                rh_diff = y_ref - r_wrist[1]
+                
+                lh_score = min(max(lh_diff / target_up, 0.0), 1.0) if l_wrist[3] >= thresh else 0.0
+                rh_score = min(max(rh_diff / target_up, 0.0), 1.0) if r_wrist[3] >= thresh else 0.0
+                
+                w_dist = np.linalg.norm(l_wrist[:2] - r_wrist[:2])
+                min_w_dist = 0.5 * shoulder_dist
+                max_w_dist = 1.8 * shoulder_dist
+                dist_score = 1.0 if w_dist <= min_w_dist else (0.0 if w_dist >= max_w_dist else (max_w_dist - w_dist) / (max_w_dist - min_w_dist))
+                
+                score = lh_score * 0.3 + rh_score * 0.3 + dist_score * 0.4
+                return min(max(score, 0.0), 1.0)
+
+            elif movement == "The Flamingo":
+                l_ankle = landmarks[28 if m else 27]
+                r_ankle = landmarks[27 if m else 28]
+                
+                ankle_diff = abs(l_ankle[1] - r_ankle[1])
+                target_diff = 1.0 * shoulder_dist
+                min_diff = 0.2 * shoulder_dist
+                score = min(max((ankle_diff - min_diff) / (target_diff - min_diff), 0.0), 1.0)
+                return score
+
+            elif movement == "Tree Pose":
+                l_ankle = landmarks[28 if m else 27]
+                r_ankle = landmarks[27 if m else 28]
+                l_knee = landmarks[26 if m else 25]
+                r_knee = landmarks[25 if m else 26]
+                
+                score_a = 0.0
+                if l_ankle[3] >= thresh and r_knee[3] >= thresh:
+                    d = np.linalg.norm(l_ankle[:2] - r_knee[:2])
+                    min_d = 0.6 * shoulder_dist
+                    max_d = 2.0 * shoulder_dist
+                    score_a = 1.0 if d <= min_d else (0.0 if d >= max_d else (max_d - d) / (max_d - min_d))
+                
+                score_b = 0.0
+                if r_ankle[3] >= thresh and l_knee[3] >= thresh:
+                    d = np.linalg.norm(r_ankle[:2] - l_knee[:2])
+                    min_d = 0.6 * shoulder_dist
+                    max_d = 2.0 * shoulder_dist
+                    score_b = 1.0 if d <= min_d else (0.0 if d >= max_d else (max_d - d) / (max_d - min_d))
+                
+                return max(score_a, score_b)
+
+            elif movement == "The Surfer":
+                l_ankle = landmarks[28 if m else 27]
+                r_ankle = landmarks[27 if m else 28]
+                
+                ankle_dist = abs(l_ankle[0] - r_ankle[0]) if (l_ankle[3] >= thresh and r_ankle[3] >= thresh) else 0.4
+                feet_score = min(max(ankle_dist / (1.5 * shoulder_dist), 0.0), 1.0)
+                
+                y_shldr = min(l_shldr[1], r_shldr[1])
+                crouch_score = min(max((nose[1] - (y_shldr - 0.35 * shoulder_dist)) / (0.35 * shoulder_dist), 0.0), 1.0)
+                
+                arm_dist = abs(l_wrist[0] - r_wrist[0])
+                arm_score = min(max(arm_dist / (2.5 * shoulder_dist), 0.0), 1.0)
+                
+                score = feet_score * 0.3 + crouch_score * 0.3 + arm_score * 0.4
+                return min(max(score, 0.0), 1.0)
+
+            elif movement == "Flying Starfish":
+                l_hip = landmarks[24 if m else 23]
+                r_hip = landmarks[23 if m else 24]
+                l_ankle = landmarks[28 if m else 27]
+                r_ankle = landmarks[27 if m else 28]
+                
+                ankle_diff = abs(l_ankle[1] - r_ankle[1]) if (l_ankle[3] >= thresh and r_ankle[3] >= thresh) else 0.0
+                leg_score = min(max(ankle_diff / (0.5 * shoulder_dist), 0.0), 1.0)
+                
+                arm_dist = abs(l_wrist[0] - r_wrist[0])
+                arms_wide_score = min(max(arm_dist / (2.2 * shoulder_dist), 0.0), 1.0)
+                
+                y_hip = min(l_hip[1], r_hip[1])
+                lh_up = max(0.0, 1.0 - max(0.0, l_wrist[1] - y_hip) / (0.5 * shoulder_dist))
+                rh_up = max(0.0, 1.0 - max(0.0, r_wrist[1] - y_hip) / (0.5 * shoulder_dist))
+                arms_up_score = lh_up * 0.5 + rh_up * 0.5
+                
+                score = leg_score * 0.4 + arms_wide_score * 0.3 + arms_up_score * 0.3
+                return min(max(score, 0.0), 1.0)
+
+
             correct, _ = self.engine.get_movement_check(movement, landmarks, mirrored=self.mirror_video)
             return 1.0 if correct else 0.0
         except Exception:
@@ -617,15 +885,15 @@ class MirrorMeGame:
         timeout = self.difficulties[self.difficulty]['timeout']
         self.round_total_frames += 1
         
-        if elapsed > timeout + 2.0: # 2s instruction + difficulty-based timeout
+        if elapsed > timeout + 2.0:
             self.round_attention_frames = self.round_total_frames
             self._save_round_data(False, elapsed, False, 0, 0.0, 0.0, 0.0)
             self.state = "FEEDBACK"
             return
 
+        self.current_pose_similarity = self._compute_pose_similarity(self.current_movement, landmarks)
         correct, dir_err = self.engine.get_movement_check(self.current_movement, landmarks, mirrored=self.mirror_video)
         
-        # Tracking Distraction (Tracking loss)
         if landmarks is None:
             self.tracking_loss_total_time += 1.0/30.0
         else:
@@ -649,20 +917,28 @@ class MirrorMeGame:
             
             if hold_elapsed >= self.hold_duration_required:
                 self.score += 1
-                current_stability = 0
-                pose_sim = self._compute_pose_similarity(self.current_movement, landmarks)
-                fidget = 0.0
+                # حساب fidget بشكل آمن
+                current_stability = 0.0
                 if self.current_round_positions:
-                    raw_var = float(np.var(self.current_round_positions, axis=0).mean())
-                    avg_scale = np.mean(self.body_scale_factors) if self.body_scale_factors else 0.2
-                    current_stability = raw_var / (avg_scale ** 2)
-                    self.hold_stability_data.append(current_stability)
+                    try:
+                        raw_var = float(np.var(self.current_round_positions, axis=0).mean())
+                        avg_scale = np.mean(self.body_scale_factors) if self.body_scale_factors else 0.2
+                        if avg_scale > 0:
+                            current_stability = raw_var / (avg_scale ** 2)
+                        else:
+                            current_stability = 0.0
+                    except:
+                        current_stability = 0.0
                     fidget = min(1.0, current_stability * 2.0)
+                else:
+                    fidget = 0.0
                 
+                # نسبة الانتباه
                 attention_pct = 1.0
                 if self.round_total_frames > 0:
                     attention_pct = self.round_attention_frames / self.round_total_frames
                 
+                pose_sim = self._compute_pose_similarity(self.current_movement, landmarks)
                 self._save_round_data(True, elapsed, dir_err, hold_elapsed, current_stability, pose_sim, fidget, attention_pct)
                 self.state = "FEEDBACK"
         else:
@@ -692,22 +968,6 @@ class MirrorMeGame:
 
     def _save_round_data(self, correct, reaction, dir_err, hold, stability=0, pose_similarity=0.0, fidget_score=0.0, attention_percent=1.0):
         is_premature = 1 if (correct and self.already_doing_pose) else 0
-        self.db.save_round(
-            self.session_id, 
-            self.child_id,
-            "Mirror Me",
-            self.current_movement, 
-            round(reaction, 2), 
-            1 if correct else 0, 
-            round(hold, 2), 
-            1 if dir_err else 0,
-            stability=round(stability, 6),
-            is_premature=is_premature,
-            target_pose_id=f"pose-{self.round_number+1}",
-            pose_similarity=round(pose_similarity, 4),
-            fidget_score=round(fidget_score, 4),
-            attention_percent=round(attention_percent, 4)
-        )
         self.stats.append({
             'num': self.round_number + 1,
             'move': self.current_movement,
@@ -743,12 +1003,23 @@ class MirrorMeGame:
     def _draw_ui(self, frame, raw_lms):
         h, w, _ = frame.shape
         
-        # 1. Beautiful semi-transparent header bar
+        # 1. Header bar
         draw_glass_panel(frame, 20, 15, 1240, 55, (15, 15, 15), COLOR_INDIGO, 0.55, 1, 10)
         header_text = f"ADHD SENSORY TRAINING: PATTERN REFLECTION"
         cv2.putText(frame, header_text, (40, 50), cv2.FONT_HERSHEY_SIMPLEX, 0.65, COLOR_WHITE, 2, cv2.LINE_AA)
         
         cv2.putText(frame, "|  LEVEL: " + self.difficulty, (520, 50), cv2.FONT_HERSHEY_SIMPLEX, 0.6, COLOR_LIGHT_INDIGO, 2, cv2.LINE_AA)
+        
+        fps = self.engine.get_fps()
+        fps_color = COLOR_EMERALD if fps >= 20 else (COLOR_AMBER if fps >= 10 else COLOR_ROSE)
+        cv2.putText(frame, f"FPS: {fps}", (750, 50), cv2.FONT_HERSHEY_SIMPLEX, 0.6, fps_color, 2, cv2.LINE_AA)
+        
+        if self.frame_count % 30 == 0:
+            brightness, status = self.engine.estimate_lighting(frame)
+            self._last_lighting_status = status
+        status = getattr(self, '_last_lighting_status', 'good')
+        light_color = COLOR_EMERALD if status == 'good' else (COLOR_AMBER if status == 'low' else COLOR_ROSE)
+        cv2.putText(frame, f"LIGHT: {status}", (850, 50), cv2.FONT_HERSHEY_SIMPLEX, 0.6, light_color, 2, cv2.LINE_AA)
         
         stats_text = f"ROUND: {self.round_number+1}/{self.total_rounds}   SCORE: {self.score}"
         text_size = cv2.getTextSize(stats_text, cv2.FONT_HERSHEY_SIMPLEX, 0.6, 2)[0]
@@ -792,19 +1063,15 @@ class MirrorMeGame:
             cv2.putText(frame, "MATCH DETECTOR", (940, 120), cv2.FONT_HERSHEY_SIMPLEX, 0.6, panel_border, 2, cv2.LINE_AA)
             cv2.line(frame, (935, 135), (1245, 135), COLOR_SLATE, 1, cv2.LINE_AA)
             
-            # Draw holding progress circle
             center_x, center_y = 1090, 260
             radius = 70
             
             if is_holding:
                 hold_elapsed = time.time() - self.hold_start_time
                 progress = min(1.0, hold_elapsed / self.hold_duration_required)
-                
                 draw_glowing_circle(frame, (center_x, center_y), radius, COLOR_EMERALD, 4, 3)
-                
                 angle = int(360 * progress)
                 cv2.ellipse(frame, (center_x, center_y), (radius, radius), -90, 0, angle, COLOR_WHITE, 6, cv2.LINE_AA)
-                
                 rem_seconds = max(0.0, self.hold_duration_required - hold_elapsed)
                 cv2.putText(frame, f"{rem_seconds:.1f}s", (center_x - 30, center_y + 10), cv2.FONT_HERSHEY_SIMPLEX, 0.75, COLOR_WHITE, 2, cv2.LINE_AA)
                 cv2.putText(frame, "HOLDING", (940, 390), cv2.FONT_HERSHEY_SIMPLEX, 0.8, COLOR_EMERALD, 2, cv2.LINE_AA)
@@ -813,9 +1080,16 @@ class MirrorMeGame:
                 cv2.circle(frame, (center_x, center_y), 8, COLOR_AMBER, -1)
                 cv2.putText(frame, "MATCHING", (940, 390), cv2.FONT_HERSHEY_SIMPLEX, 0.8, COLOR_AMBER, 2, cv2.LINE_AA)
             
-            cv2.putText(frame, "Stability Level:", (940, 440), cv2.FONT_HERSHEY_SIMPLEX, 0.5, COLOR_GRAY, 1, cv2.LINE_AA)
+            sim = getattr(self, 'current_pose_similarity', 0.0)
+            sim_color = COLOR_EMERALD if sim > 0.7 else (COLOR_AMBER if sim > 0.4 else COLOR_ROSE)
+            cv2.putText(frame, f"SIMILARITY: {sim:.0%}", (940, 425), cv2.FONT_HERSHEY_SIMPLEX, 0.5, COLOR_GRAY, 1, cv2.LINE_AA)
+            bar_x, bar_y, bar_w, bar_h = 940, 435, 300, 12
+            cv2.rectangle(frame, (bar_x, bar_y), (bar_x + bar_w, bar_y + bar_h), (40, 40, 40), -1)
+            cv2.rectangle(frame, (bar_x, bar_y), (bar_x + int(bar_w * sim), bar_y + bar_h), sim_color, -1)
+            
+            cv2.putText(frame, "Stability Level:", (940, 475), cv2.FONT_HERSHEY_SIMPLEX, 0.5, COLOR_GRAY, 1, cv2.LINE_AA)
             stability_str = "EXCELLENT" if is_holding else "CALIBRATING"
-            cv2.putText(frame, stability_str, (940, 465), cv2.FONT_HERSHEY_SIMPLEX, 0.65, COLOR_EMERALD if is_holding else COLOR_WHITE, 2, cv2.LINE_AA)
+            cv2.putText(frame, stability_str, (940, 500), cv2.FONT_HERSHEY_SIMPLEX, 0.65, COLOR_EMERALD if is_holding else COLOR_WHITE, 2, cv2.LINE_AA)
 
         # 4. Bottom Feedback & Navigation Area
         draw_glass_panel(frame, 20, 620, 1240, 85, (15, 15, 15), COLOR_INDIGO, 0.55, 1, 12)
@@ -859,47 +1133,69 @@ class MirrorMeGame:
     def _handle_summary(self, frame, landmarks):
         h, w, _ = frame.shape
 
+        # حساب المتوسطات مع التحقق من القوائم الفارغة
         avg_react = np.mean([s['reaction'] for s in self.stats]) if self.stats else 0
         avg_similarity = np.mean([s['pose_similarity'] for s in self.stats]) if self.stats else 0
         avg_fidget = np.mean([s['fidget_score'] for s in self.stats]) if self.stats else 0
         avg_attention = np.mean([s['attention_percent'] for s in self.stats]) if self.stats else 0
 
         if not self.session_saved:
-            # Save to local SQLite (sync_remote=False to avoid duplicate API session)
-            self.db.save_session({
-                "child_id": self.child_id,
-                "session_id": self.session_id,
-                "game_name": "Mirror Me",
-                "difficulty": self.difficulty,
-                "start_time": datetime.fromtimestamp(self.game_start_timestamp).isoformat(),
-                "duration_minutes": round((time.time() - self.game_start_timestamp) / 60, 2),
-                "total_trials": self.total_rounds,
-                "success_rate": round((self.score / self.total_rounds * 100) if self.total_rounds > 0 else 0, 2),
-                "avg_reaction_time": round(avg_react, 4),
-                "max_consecutive_success": self.max_consecutive_success,
-                "false_moves": self.direction_errors_count,
-                "false_stops": 0,
-                "red_phase_errors": 0,
-                "green_phase_errors": 0,
-                "impulsivity_index": round((self.premature_moves_count / self.total_rounds * 100) if self.total_rounds > 0 else 0, 2),
-                "motor_control_score": round(float(np.mean(self.hold_stability_data)) * 100 if self.hold_stability_data else 0, 2),
-                "distraction_score": round(self.tracking_loss_total_time, 2),
-                "average_similarity": round(float(avg_similarity), 2),
-                "total_fidget_score": round(float(avg_fidget), 2),
-                "attention_overall": round(float(avg_attention), 2)
-            }, sync_remote=False)
-
-            # Send to .NET backend API via backend_api.py (single sync path)
-            api_session_id = create_session(self.child_id, "mirror_me")
-            if api_session_id:
-                save_mirror_me_trials(api_session_id, self.trial_results)
-                save_summary(api_session_id, {
-                    "totalTrials": self.total_rounds,
+            output = {
+                "userId": self.child_id,
+                "sessionId": self.session_id,
+                "gameType": "mirror_me",
+                "timestamp": datetime.fromtimestamp(self.game_start_timestamp).isoformat(),
+                "previousSessionsCount": 0,
+                "trials": self.trial_results,
+                "sessionSummary": {
                     "averageReactionTimeMs": round(avg_react * 1000, 0),
                     "averageSimilarity": round(avg_similarity, 2),
                     "totalFidgetScore": round(avg_fidget, 2),
-                    "attentionOverall": round(avg_attention, 2)
-                })
+                    "attentionOverall": round(avg_attention, 2),
+                    "totalTrials": self.total_rounds
+                }
+            }
+
+            if not os.path.exists('session_data'):
+                os.makedirs('session_data')
+            json_filename = f"session_data/{self.child_id}_{self.session_id}_mirror_me.json"
+            with open(json_filename, 'w', encoding='utf-8') as f:
+                json.dump(output, f, indent=2, ensure_ascii=False)
+            print(f"✅ Mirror Me session data saved to {json_filename}")
+
+            # API SYNC
+            try:
+                from backend_api import create_session, save_mirror_me_trials, save_summary
+                print("Syncing Mirror Me session data to backend API...")
+                api_session_id = create_session(self.child_id, "MirrorMe")
+                if api_session_id:
+                    api_trials = []
+                    for t in self.trial_results:
+                        api_trials.append({
+                            "TrialIndex": int(t["trialIndex"]),
+                            "TargetPoseId": str(t["targetPoseId"]),
+                            "ReactionTimeMs": int(t["reactionTimeMs"]),
+                            "PoseSimilarity": float(t["poseSimilarity"]),
+                            "HoldingDurationMs": int(t["holdingDurationMs"]),
+                            "FidgetScore": float(t["fidgetScore"]),
+                            "PrematureMovement": bool(t["prematureMovement"]),
+                            "AttentionPercent": float(t["attentionPercent"])
+                        })
+                    save_mirror_me_trials(api_session_id, api_trials)
+                    
+                    api_summary = {
+                        "TotalTrials": int(self.total_rounds),
+                        "AverageReactionTimeMs": float(round(avg_react * 1000, 0)),
+                        "AverageSimilarity": float(round(avg_similarity, 2)),
+                        "TotalFidgetScore": float(round(avg_fidget, 2)),
+                        "AttentionOverall": float(round(avg_attention, 2))
+                    }
+                    save_summary(api_session_id, api_summary)
+                    print("✅ Sync with API completed successfully!")
+                else:
+                    print("❌ Could not create session on API.")
+            except Exception as e:
+                print(f"❌ Error syncing with API: {e}")
 
             self.session_saved = True
 

@@ -1,27 +1,31 @@
 import cv2
 import mediapipe as mp
 import numpy as np
+import time
 from mediapipe.python.solutions import pose as mp_pose
 from mediapipe.python.solutions import drawing_utils as mp_drawing
 from collections import deque
 
 class PoseEngine:
-    def __init__(self, smooth_factor=0.3, use_advanced_preprocessing=True):
+    def __init__(self, smooth_factor=0.3, use_advanced_preprocessing=False, model_complexity=1):
         self.pose = mp_pose.Pose(
             static_image_mode=False,
-            model_complexity=2,
+            model_complexity=model_complexity,
             smooth_landmarks=True,
             smooth_segmentation=True,
-            min_detection_confidence=0.7,
-            min_tracking_confidence=0.7
+            min_detection_confidence=0.5,
+            min_tracking_confidence=0.5
         )
         self.smooth_factor = smooth_factor
         self.use_advanced_preprocessing = use_advanced_preprocessing
+        self.model_complexity = model_complexity
         self._smoothed_prev = None
         self.last_raw_landmarks = None
         self.history = []
+        self.fps_counter = {'last_time': None, 'count': 0, 'fps': 0}
 
     def process_frame(self, frame, mirrored=True):
+        self._update_fps()
         rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
 
         if self.use_advanced_preprocessing:
@@ -45,21 +49,59 @@ class PoseEngine:
             return smoothed_landmarks, results.pose_landmarks
         return None, None
 
+    def _update_fps(self):
+        now = time.time()
+        if self.fps_counter['last_time'] is None:
+            self.fps_counter['last_time'] = now
+            self.fps_counter['count'] = 0
+        else:
+            self.fps_counter['count'] += 1
+            elapsed = now - self.fps_counter['last_time']
+            if elapsed >= 1.0:
+                self.fps_counter['fps'] = int(self.fps_counter['count'] / elapsed)
+                self.fps_counter['last_time'] = now
+                self.fps_counter['count'] = 0
+
+    def get_fps(self):
+        return self.fps_counter['fps']
+
+    def estimate_lighting(self, frame):
+        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        mean_brightness = np.mean(gray)
+        if mean_brightness > 100:
+            return mean_brightness, "good"
+        elif mean_brightness > 50:
+            return mean_brightness, "low"
+        else:
+            return mean_brightness, "very_low"
+
+    def adjust_confidence_for_lighting(self, brightness):
+        if brightness > 100:
+            self.pose.min_detection_confidence = 0.7
+            self.pose.min_tracking_confidence = 0.7
+        elif brightness > 50:
+            self.pose.min_detection_confidence = 0.5
+            self.pose.min_tracking_confidence = 0.5
+        else:
+            self.pose.min_detection_confidence = 0.3
+            self.pose.min_tracking_confidence = 0.3
+
     def _preprocess(self, rgb_frame):
         lab = cv2.cvtColor(rgb_frame, cv2.COLOR_RGB2LAB)
         l, a, b = cv2.split(lab)
-        clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+        clahe = cv2.createCLAHE(clipLimit=1.5, tileGridSize=(8, 8))
         l = clahe.apply(l)
         rgb_frame = cv2.cvtColor(cv2.merge([l, a, b]), cv2.COLOR_LAB2RGB)
-        rgb_frame = cv2.bilateralFilter(rgb_frame, 5, 50, 50)
         return rgb_frame
 
     def _validate_landmarks(self, landmarks):
+        """التحقق من صحة النقاط - نطاق أوسع لتجنب الرفض الخاطئ"""
         l_shldr = landmarks.get(11)
         r_shldr = landmarks.get(12)
         if l_shldr is not None and r_shldr is not None:
             shoulder_width = np.linalg.norm(l_shldr[:2] - r_shldr[:2])
-            if shoulder_width < 0.05 or shoulder_width > 0.8:
+            # زيادة النطاق المسموح به لتغطية حالات القرب والبعد
+            if shoulder_width < 0.03 or shoulder_width > 0.9:
                 return False
         return True
 
@@ -106,8 +148,6 @@ class PoseEngine:
         
         if mirrored:
             # Swap left and right indices for mirrored logic
-            # Left: Wrist(15), Shoulder(11), Elbow(13), Knee(25), Hip(23), Ear(7)
-            # Right: Wrist(16), Shoulder(12), Elbow(14), Knee(26), Hip(24), Ear(8)
             l_wrist = landmarks[16]
             r_wrist = landmarks[15]
             l_shldr = landmarks[12]
@@ -139,123 +179,183 @@ class PoseEngine:
             r_ankle = landmarks[28]
         
         nose = landmarks[0]
-        thresh = 0.5
+        thresh = 0.15
         
+        # Calculate shoulder distance for scale-invariant checks
+        shoulder_dist = np.linalg.norm(l_shldr[:2] - r_shldr[:2])
+        if shoulder_dist < 0.05:
+            shoulder_dist = 0.2
+
         def is_visible(idx_list):
             return all(landmarks[idx][3] >= thresh for idx in idx_list)
 
         if movement_name == "Raise Right Hand":
-            if not is_visible([16, 12, 11, 15]): return False, False
+            r_wrist_idx = 15 if mirrored else 16
+            r_elbow_idx = 13 if mirrored else 14
+            r_shldr_idx = 11 if mirrored else 12
+            l_shldr_idx = 12 if mirrored else 11
+            l_wrist_idx = 16 if mirrored else 15
+            
+            if not is_visible([r_wrist_idx, r_elbow_idx, r_shldr_idx]):
+                return False, False
+                
             elbow_angle = PoseEngine.angle_between(r_shldr, r_elbow, r_wrist)
-            arm_straight_up = np.degrees(elbow_angle) < 40
-            wrist_above_shldr = r_wrist[1] < r_shldr[1] - 0.1
-            correct = arm_straight_up and wrist_above_shldr and l_wrist[1] > l_shldr[1]
-            dir_err = l_wrist[1] < l_shldr[1] - 0.1 and r_wrist[1] > r_shldr[1]
+            arm_straight_up = np.degrees(elbow_angle) > 85
+            wrist_above_shldr = r_wrist[1] < r_shldr[1]
+            
+            # Left wrist: if visible, it must be down. If not visible (off-screen), it is assumed down.
+            left_hand_down = True
+            if landmarks[l_wrist_idx][3] >= thresh:
+                left_hand_down = l_wrist[1] > l_shldr[1]
+                
+            correct = arm_straight_up and wrist_above_shldr and left_hand_down
+            
+            dir_err = False
+            if landmarks[l_wrist_idx][3] >= thresh:
+                l_elbow_idx = 14 if mirrored else 13
+                if is_visible([l_wrist_idx, l_elbow_idx]):
+                    l_elbow_angle = PoseEngine.angle_between(l_shldr, l_elbow, l_wrist)
+                    l_arm_straight = np.degrees(l_elbow_angle) > 85
+                    l_wrist_above = l_wrist[1] < l_shldr[1]
+                    dir_err = l_arm_straight and l_wrist_above and r_wrist[1] > r_shldr[1]
+            
             return correct, dir_err
 
         elif movement_name == "Raise Left Hand":
-            if not is_visible([15, 11, 12, 16]): return False, False
+            l_wrist_idx = 16 if mirrored else 15
+            l_elbow_idx = 14 if mirrored else 13
+            l_shldr_idx = 12 if mirrored else 11
+            r_shldr_idx = 11 if mirrored else 12
+            r_wrist_idx = 15 if mirrored else 16
+            
+            if not is_visible([l_wrist_idx, l_elbow_idx, l_shldr_idx]):
+                return False, False
+                
             elbow_angle = PoseEngine.angle_between(l_shldr, l_elbow, l_wrist)
-            arm_straight_up = np.degrees(elbow_angle) < 40
-            wrist_above_shldr = l_wrist[1] < l_shldr[1] - 0.1
-            correct = arm_straight_up and wrist_above_shldr and r_wrist[1] > r_shldr[1]
-            dir_err = r_wrist[1] < r_shldr[1] - 0.1 and l_wrist[1] > l_shldr[1]
+            arm_straight_up = np.degrees(elbow_angle) > 85
+            wrist_above_shldr = l_wrist[1] < l_shldr[1]
+            
+            right_hand_down = True
+            if landmarks[r_wrist_idx][3] >= thresh:
+                right_hand_down = r_wrist[1] > r_shldr[1]
+                
+            correct = arm_straight_up and wrist_above_shldr and right_hand_down
+            
+            dir_err = False
+            if landmarks[r_wrist_idx][3] >= thresh:
+                r_elbow_idx = 13 if mirrored else 14
+                if is_visible([r_wrist_idx, r_elbow_idx]):
+                    r_elbow_angle = PoseEngine.angle_between(r_shldr, r_elbow, r_wrist)
+                    r_arm_straight = np.degrees(r_elbow_angle) > 85
+                    r_wrist_above = r_wrist[1] < r_shldr[1]
+                    dir_err = r_arm_straight and r_wrist_above and l_wrist[1] > l_shldr[1]
+            
             return correct, dir_err
 
         elif movement_name == "Hands on Hips":
-            if not is_visible([15, 23, 16, 24]): return False, False
-            # Hands on Hips: Wrists close to hips (23, 24)
+            if not is_visible([15, 16]): return False, False
             dist_l = np.linalg.norm(l_wrist[:2] - l_hip[:2])
             dist_r = np.linalg.norm(r_wrist[:2] - r_hip[:2])
-            # Check if wrists are near hips and significantly below shoulders
-            correct = dist_l < 0.2 and dist_r < 0.2 and l_wrist[1] > l_shldr[1] + 0.1 and r_wrist[1] > r_shldr[1] + 0.1
+            max_dist = 1.8 * shoulder_dist
+            correct = dist_l < max_dist and dist_r < max_dist and l_wrist[1] > l_shldr[1] and r_wrist[1] > r_shldr[1]
             return correct, False
 
         elif movement_name == "Touch Knees":
-            if not is_visible([15, 25, 16, 26]): return False, False
-            # Wrists close to knees
-            dist_l = np.linalg.norm(l_wrist[:2] - l_knee[:2])
-            dist_r = np.linalg.norm(r_wrist[:2] - r_knee[:2])
-            correct = dist_l < 0.15 and dist_r < 0.15
+            if not is_visible([15, 16]):
+                return False, False
+            if is_visible([25, 26]):
+                dist_l = np.linalg.norm(l_wrist[:2] - l_knee[:2])
+                dist_r = np.linalg.norm(r_wrist[:2] - r_knee[:2])
+                max_dist = 1.8 * shoulder_dist
+                correct = dist_l < max_dist and dist_r < max_dist
+            elif is_visible([23, 24]):
+                correct = l_wrist[1] > l_hip[1] + 0.25 * shoulder_dist and r_wrist[1] > r_hip[1] + 0.25 * shoulder_dist
+            else:
+                correct = l_wrist[1] > l_shldr[1] + 1.25 * shoulder_dist and r_wrist[1] > r_shldr[1] + 1.25 * shoulder_dist
             return correct, False
 
         elif movement_name == "Put Hand Above Head":
-            # Either hand above nose
-            r_up = r_wrist[3] > thresh and r_wrist[1] < nose[1]
-            l_up = l_wrist[3] > thresh and l_wrist[1] < nose[1]
+            r_up = r_wrist[3] > thresh and (r_wrist[1] < nose[1] or r_wrist[1] < r_shldr[1] - 0.5 * shoulder_dist)
+            l_up = l_wrist[3] > thresh and (l_wrist[1] < nose[1] or l_wrist[1] < l_shldr[1] - 0.5 * shoulder_dist)
             return r_up or l_up, False
 
         elif movement_name == "Raise Both Hands":
-            if not is_visible([15, 11, 16, 12]): return False, False
+            if not is_visible([15, 16]): return False, False
             l_angle = np.degrees(PoseEngine.angle_between(l_shldr, l_elbow, l_wrist))
             r_angle = np.degrees(PoseEngine.angle_between(r_shldr, r_elbow, r_wrist))
-            both_straight = l_angle < 40 and r_angle < 40
-            both_above = r_wrist[1] < r_shldr[1] - 0.1 and l_wrist[1] < l_shldr[1] - 0.1
+            both_straight = l_angle > 85 and r_angle > 85
+            both_above = r_wrist[1] < r_shldr[1] and l_wrist[1] < l_shldr[1]
             return both_straight and both_above, False
 
         elif movement_name == "Cross Arms on Chest":
-            if not is_visible([15, 12, 16, 11]): return False, False
-            # Left wrist near right shoulder AND right wrist near left shoulder
+            if not is_visible([15, 16]): return False, False
             dist_l_r_shldr = np.linalg.norm(l_wrist[:2] - r_shldr[:2])
             dist_r_l_shldr = np.linalg.norm(r_wrist[:2] - l_shldr[:2])
-            correct = dist_l_r_shldr < 0.2 and dist_r_l_shldr < 0.2
+            max_dist = 1.4 * shoulder_dist
+            correct = dist_l_r_shldr < max_dist and dist_r_l_shldr < max_dist
             return correct, False
 
         elif movement_name == "Arms Out to Sides":
-            if not is_visible([15, 11, 16, 12]): return False, False
-            # Wrists at shoulder level but far away horizontally
-            same_level = abs(l_wrist[1] - l_shldr[1]) < 0.15 and abs(r_wrist[1] - r_shldr[1]) < 0.15
-            far_out = abs(l_wrist[0] - l_shldr[0]) > 0.2 and abs(r_wrist[0] - r_shldr[0]) > 0.2
+            if not is_visible([15, 16]): return False, False
+            same_level = abs(l_wrist[1] - l_shldr[1]) < 0.8 * shoulder_dist and abs(r_wrist[1] - r_shldr[1]) < 0.8 * shoulder_dist
+            far_out = abs(l_wrist[0] - l_shldr[0]) > 0.75 * shoulder_dist and abs(r_wrist[0] - r_shldr[0]) > 0.75 * shoulder_dist
             correct = same_level and far_out
             return correct, False
 
         elif movement_name == "Flex Muscles":
-            if not is_visible([15, 13, 11, 16, 14, 12]): return False, False
-            # Both elbows out, wrists above elbows
-            elbows_out = abs(l_shldr[1] - l_elbow[1]) < 0.1 and abs(r_shldr[1] - r_elbow[1]) < 0.1
-            wrists_up = l_wrist[1] < l_elbow[1] - 0.1 and r_wrist[1] < r_elbow[1] - 0.1
+            if not is_visible([15, 13, 16, 14]): return False, False
+            elbows_out = abs(l_shldr[1] - l_elbow[1]) < 0.75 * shoulder_dist and abs(r_shldr[1] - r_elbow[1]) < 0.75 * shoulder_dist
+            wrists_up = l_wrist[1] < l_elbow[1] + 0.25 * shoulder_dist and r_wrist[1] < r_elbow[1] + 0.25 * shoulder_dist
             correct = elbows_out and wrists_up
             return correct, False
 
         elif movement_name == "One Hand Up, One Hand on Hip":
-            r_up_l_hip = r_wrist[3] > thresh and r_wrist[1] < r_shldr[1] - 0.1 and \
-                         l_wrist[3] > thresh and np.linalg.norm(l_wrist[:2] - l_hip[:2]) < 0.2
-            l_up_r_hip = l_wrist[3] > thresh and l_wrist[1] < l_shldr[1] - 0.1 and \
-                         r_wrist[3] > thresh and np.linalg.norm(r_wrist[:2] - r_hip[:2]) < 0.2
+            r_up_l_hip = r_wrist[3] > thresh and r_wrist[1] < r_shldr[1] - 0.25 * shoulder_dist and \
+                         l_wrist[3] > thresh and np.linalg.norm(l_wrist[:2] - l_hip[:2]) < 1.75 * shoulder_dist
+            l_up_r_hip = l_wrist[3] > thresh and l_wrist[1] < l_shldr[1] - 0.25 * shoulder_dist and \
+                         r_wrist[3] > thresh and np.linalg.norm(r_wrist[:2] - r_hip[:2]) < 1.75 * shoulder_dist
             return r_up_l_hip or l_up_r_hip, False
 
         elif movement_name == "Archer Pose":
-            # Archer Right: Right arm forward, Left hand near Left ear
-            archer_r = r_wrist[3] > thresh and r_wrist[0] < r_shldr[0] - 0.2 and \
-                       l_wrist[3] > thresh and np.linalg.norm(l_wrist[:2] - l_ear[:2]) < 0.2
-            # Archer Left: Left arm forward, Right hand near Right ear
-            archer_l = l_wrist[3] > thresh and l_wrist[0] > l_shldr[0] + 0.2 and \
-                       r_wrist[3] > thresh and np.linalg.norm(r_wrist[:2] - r_ear[:2]) < 0.2
+            archer_r = r_wrist[3] > thresh and r_wrist[0] > r_shldr[0] + 0.75 * shoulder_dist and \
+                       l_wrist[3] > thresh and np.linalg.norm(l_wrist[:2] - l_ear[:2]) < 1.5 * shoulder_dist
+            archer_l = l_wrist[3] > thresh and l_wrist[0] < l_shldr[0] - 0.75 * shoulder_dist and \
+                       r_wrist[3] > thresh and np.linalg.norm(r_wrist[:2] - r_ear[:2]) < 1.5 * shoulder_dist
             return archer_r or archer_l, False
 
         elif movement_name == "The Surfer":
-            if not is_visible([27, 28, 15, 16, 11, 12, 0]): return False, False
-            # Sideways wide stance, knees bent, arms out
-            wide = abs(l_ankle[0] - r_ankle[0]) > 0.4
-            crouching = nose[1] > min(l_shldr[1], r_shldr[1]) + 0.05
-            arms_extended = abs(l_wrist[0] - r_wrist[0]) > 0.6
+            if not is_visible([15, 16, 11, 12, 0]): return False, False
+            wide = True
+            if is_visible([27, 28]):
+                wide = abs(l_ankle[0] - r_ankle[0]) > 1.4 * shoulder_dist
+            crouching = nose[1] > min(l_shldr[1], r_shldr[1]) - 0.35 * shoulder_dist
+            arms_extended = abs(l_wrist[0] - r_wrist[0]) > 2.2 * shoulder_dist
             return wide and crouching and arms_extended, False
 
-        elif movement_name == "Crouching Tiger":
-            if not is_visible([0, 11, 15, 16]): return False, False
-            deep_crouch = nose[1] > l_shldr[1] + 0.1
-            hands_forward = np.linalg.norm(l_wrist[:2] - nose[:2]) < 0.3 and np.linalg.norm(r_wrist[:2] - nose[:2]) < 0.3
-            return deep_crouch and hands_forward, False
+        elif movement_name == "Flying Starfish":
+            if not is_visible([15, 16, 27, 28]): return False, False
+            one_leg_raised = abs(l_ankle[1] - r_ankle[1]) > 0.5 * shoulder_dist
+            arms_wide = abs(l_wrist[0] - r_wrist[0]) > 2.2 * shoulder_dist
+            arms_up = l_wrist[1] < l_hip[1] and r_wrist[1] < r_hip[1]
+            return one_leg_raised and arms_wide and arms_up, False
 
         elif movement_name == "Tree Pose":
-            l_on_r = l_ankle[3] > thresh and r_knee[3] > thresh and np.linalg.norm(l_ankle[:2] - r_knee[:2]) < 0.15
-            r_on_l = r_ankle[3] > thresh and l_knee[3] > thresh and np.linalg.norm(r_ankle[:2] - l_knee[:2]) < 0.15
+            l_on_r = l_ankle[3] > thresh and r_knee[3] > thresh and np.linalg.norm(l_ankle[:2] - r_knee[:2]) < 1.1 * shoulder_dist
+            r_on_l = r_ankle[3] > thresh and l_knee[3] > thresh and np.linalg.norm(r_ankle[:2] - l_knee[:2]) < 1.1 * shoulder_dist
             return l_on_r or r_on_l, False
+
+        elif movement_name == "The Flamingo":
+            if not is_visible([27, 28]):
+                return False, False
+            left_raised = (r_ankle[1] - l_ankle[1]) > 0.8 * shoulder_dist
+            right_raised = (l_ankle[1] - r_ankle[1]) > 0.8 * shoulder_dist
+            correct = left_raised or right_raised
+            return correct, False
 
         elif movement_name == "Arms Forming a Circle":
             if not is_visible([15, 16, 0]): return False, False
-            above_head = r_wrist[1] < nose[1] - 0.1 and l_wrist[1] < nose[1] - 0.1
-            hands_close = np.linalg.norm(l_wrist[:2] - r_wrist[:2]) < 0.15
+            above_head = r_wrist[1] < nose[1] + 0.25 * shoulder_dist and l_wrist[1] < nose[1] + 0.25 * shoulder_dist
+            hands_close = np.linalg.norm(l_wrist[:2] - r_wrist[:2]) < 1.25 * shoulder_dist
             return above_head and hands_close, False
 
         return False, False

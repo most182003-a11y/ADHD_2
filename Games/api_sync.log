@@ -1,0 +1,24 @@
+[2026-07-08 19:30:23] OK /api/sessions (attempt 1) -> 200
+[2026-07-08 19:30:23] Session created: 8a31c785-a068-4d35-86c3-145cf887c472 (child=0907cc85-427b-47b1-a445-151e99b14813, game=MirrorMe)
+[2026-07-08 19:30:23] OK /api/sessions/8a31c785-a068-4d35-86c3-145cf887c472/mirror-me-trials (attempt 1) -> 200
+[2026-07-08 19:30:23] 5 Mirror Me trials saved to session 8a31c785-a068-4d35-86c3-145cf887c472
+[2026-07-08 19:30:23] OK /api/sessions/8a31c785-a068-4d35-86c3-145cf887c472/summary (attempt 1) -> 200
+[2026-07-08 19:30:23] Summary saved for session 8a31c785-a068-4d35-86c3-145cf887c472
+[2026-07-08 20:27:35] OK /api/sessions (attempt 1) -> 200
+[2026-07-08 20:27:35] Session created: 85a10373-c085-424b-a9ef-3adb71c13b3e (child=0907cc85-427b-47b1-a445-151e99b14813, game=MirrorMe)
+[2026-07-08 20:27:35] OK /api/sessions/85a10373-c085-424b-a9ef-3adb71c13b3e/mirror-me-trials (attempt 1) -> 200
+[2026-07-08 20:27:35] 5 Mirror Me trials saved to session 85a10373-c085-424b-a9ef-3adb71c13b3e
+[2026-07-08 20:27:35] OK /api/sessions/85a10373-c085-424b-a9ef-3adb71c13b3e/summary (attempt 1) -> 200
+[2026-07-08 20:27:35] Summary saved for session 85a10373-c085-424b-a9ef-3adb71c13b3e
+[2026-07-08 20:29:11] OK /api/sessions (attempt 1) -> 200
+[2026-07-08 20:29:11] Session created: 09104865-1ea9-4723-aa1e-e602cf187024 (child=0907cc85-427b-47b1-a445-151e99b14813, game=RedLightGreenLight)
+[2026-07-08 20:29:11] OK /api/sessions/09104865-1ea9-4723-aa1e-e602cf187024/green-light-trials (attempt 1) -> 200
+[2026-07-08 20:29:11] 2 Green Light trials saved to session 09104865-1ea9-4723-aa1e-e602cf187024
+[2026-07-08 20:29:11] OK /api/sessions/09104865-1ea9-4723-aa1e-e602cf187024/summary (attempt 1) -> 200
+[2026-07-08 20:29:11] Summary saved for session 09104865-1ea9-4723-aa1e-e602cf187024
+[2026-07-08 20:30:55] OK /api/sessions (attempt 1) -> 200
+[2026-07-08 20:30:55] Session created: b45e7037-ddff-44d8-9f0c-7579f9663664 (child=0907cc85-427b-47b1-a445-151e99b14813, game=RedLightGreenLight)
+[2026-07-08 20:30:55] OK /api/sessions/b45e7037-ddff-44d8-9f0c-7579f9663664/green-light-trials (attempt 1) -> 200
+[2026-07-08 20:30:55] 2 Green Light trials saved to session b45e7037-ddff-44d8-9f0c-7579f9663664
+[2026-07-08 20:30:55] OK /api/sessions/b45e7037-ddff-44d8-9f0c-7579f9663664/summary (attempt 1) -> 200
+[2026-07-08 20:30:55] Summary saved for session b45e7037-ddff-44d8-9f0c-7579f9663664
