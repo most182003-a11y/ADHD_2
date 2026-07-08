@@ -44,3 +44,6 @@ ClientBin/
 
 # Mac OS files
 .DS_Store
+
+*.pkl
+ai-integration/models/
