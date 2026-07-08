@@ -11,10 +11,6 @@ _games_dir = os.path.dirname(_script_dir)  # Games/
 for _p in (_script_dir, _games_dir):
     if _p not in sys.path:
         sys.path.insert(0, _p)
-# Primary: resolve modules from Software_Games (backend_api, pose_engine, database)
-for _p in (_script_dir, _games_dir):
-    if _p not in sys.path:
-        sys.path.insert(0, _p)
 
 os.environ["OPENBLAS_NUM_THREADS"] = "1"
 os.environ["OMP_NUM_THREADS"] = "1"
@@ -26,23 +22,19 @@ import time
 import pygame
 import threading
 import json
-import csv
 from datetime import datetime
-from database import GameDatabase
 from pose_engine import PoseEngine
-from backend_api import create_session, save_green_light_trials, save_summary
+from ui_utils import draw_glass_panel, put_centered_text, COLOR_DARK, COLOR_SLATE, COLOR_INDIGO, COLOR_LIGHT_INDIGO, COLOR_EMERALD, COLOR_ROSE, COLOR_AMBER, COLOR_WHITE, COLOR_GRAY
 from collections import deque
 import numpy as np
 
 # تهيئة pygame للأصوات
-pygame.mixer.init()
-
-# تحميل ملفات الصوت
 try:
+    pygame.mixer.init()
     green_sound = pygame.mixer.Sound(os.path.join(_script_dir, "Green_light.mp3"))
     red_sound = pygame.mixer.Sound(os.path.join(_script_dir, "Red_Light.mp3"))
 except:
-    print("ملاحظة: ملفات الصوت غير موجودة، سيتم تشغيل البرنامج بدون صوت")
+    print("[Sound] Audio files not found. Running without sound.")
     green_sound = None
     red_sound = None
 
@@ -56,15 +48,25 @@ def play_sound(sound_file):
 class MotionDetector:
     def __init__(self, threshold=15):
         self.threshold = threshold
-        self.pose_engine = PoseEngine(smooth_factor=5)
+        self.pose_engine = PoseEngine(smooth_factor=0.3, model_complexity=1)
         self.previous_landmarks = None
         self.start_time = None
-        self.motion_history = deque(maxlen=100)  # حفظ تاريخ الحركة
-        self.motion_magnitude_history = deque(maxlen=100)  # شدة الحركة
+        self.motion_history = deque(maxlen=100)
+        self.motion_magnitude_history = deque(maxlen=100)
         self.last_raw_landmarks = None
+        self.frame_count = 0
+        self.process_every_n_frames = 2
         
     def detect_motion(self, frame):
-        smoothed_landmarks, raw_landmarks = self.pose_engine.process_frame(frame, mirrored=True)
+        self.frame_count += 1
+        if self.frame_count % self.process_every_n_frames == 0:
+            smoothed_landmarks, raw_landmarks = self.pose_engine.process_frame(frame, mirrored=True)
+            if smoothed_landmarks is not None:
+                self._cached_smoothed = smoothed_landmarks
+                self._cached_raw = raw_landmarks
+        else:
+            smoothed_landmarks = getattr(self, '_cached_smoothed', None)
+            raw_landmarks = getattr(self, '_cached_raw', None)
         self.last_raw_landmarks = raw_landmarks
         
         if smoothed_landmarks is None:
@@ -251,6 +253,20 @@ class GameDataCollector:
         """توليد ملخص الجلسة والمؤشرات المركبة"""
         trials = self.session_data['trials']
         if not trials:
+            # تعيين قيم افتراضية لتجنب الأخطاء
+            self.session_data['summary'] = {
+                'session_duration': 0,
+                'total_trials': 0,
+                'false_moves': 0,
+                'false_stops': 0,
+                'success_rate': 0,
+                'avg_reaction_time': 0,
+                'impulsivity_index': 0,
+                'motor_control_score': 0,
+                'distraction_score': 0,
+                'max_consecutive_success': 0,
+                'time_before_first_error': 0
+            }
             return
             
         # إحصائيات أساسية
@@ -264,8 +280,8 @@ class GameDataCollector:
         # مؤشر الاندفاعية (Impulsivity Index)
         impulsivity_index = (false_moves / len(red_trials)) * 100 if red_trials else 0
         
-        # مؤشر التحكم الحركي
-        if self.session_data['freeze_durations']:
+        # مؤشر التحكم الحركي - تجنب القسمة على صفر
+        if self.session_data['freeze_durations'] and red_trials:
             avg_freeze = sum(self.session_data['freeze_durations']) / len(self.session_data['freeze_durations'])
             expected_freeze = sum(t['expected_duration'] for t in red_trials) / len(red_trials) if red_trials else 1
             motor_control_score = (avg_freeze / expected_freeze) * 100
@@ -319,97 +335,105 @@ class GameDataCollector:
         return time.time() - self.session_start
         
     def save_data(self):
-        """حفظ البيانات في ملفات"""
-        # إنشاء مجلد للبيانات إذا لم يكن موجوداً
+        """حفظ البيانات في ملف JSON مطابق للهيكل المطلوب"""
         if not os.path.exists('session_data'):
             os.makedirs('session_data')
+        
+        trials = self.session_data['trials']
+        green_trials = [t for t in trials if t['phase'] == 'green']
+        red_trials = [t for t in trials if t['phase'] == 'red']
+        num_pairs = min(len(green_trials), len(red_trials))
+        
+        export_trials = []
+        all_intensities = []
+        all_stop_reactions = []
+        all_freeze_qualities = []
+        false_start_count = 0
+        
+        # الحصول على عتبة الحركة من MotionDetector (افتراضي إذا لم يتوفر)
+        try:
+            threshold = md.threshold
+        except:
+            threshold = 15.0  # القيمة الافتراضية
+        
+        for i in range(num_pairs):
+            gt = green_trials[i]
+            rt = red_trials[i]
             
-        # حفظ بصيغة JSON
+            movement_intensity = round(min(1.0, gt.get('motion_magnitude', 0) / 50.0), 4)
+            all_intensities.append(movement_intensity)
+            false_start = rt.get('motion_detected', False)
+            
+            if false_start and rt.get('motion_time') and rt.get('start_time'):
+                stop_reaction_ms = int(round((rt['motion_time'] - rt['start_time']) * 1000, 0))
+            else:
+                # محاولة حساب زمن التوقف من بيانات الحركة المسجلة
+                red_mags = [
+                    m['magnitude'] for m in self.session_data['movement_data']
+                    if m['phase'] == 'red' and rt['start_time'] <= m['time'] <= rt['end_time']
+                ]
+                first_still = next((m for m in red_mags if m < threshold), None)
+                if first_still is not None and red_mags:
+                    still_idx = red_mags.index(first_still)
+                    still_entry = [m for m in self.session_data['movement_data']
+                                   if m['phase'] == 'red' and rt['start_time'] <= m['time'] <= rt['end_time']]
+                    if still_idx < len(still_entry):
+                        stop_reaction_ms = int(round((still_entry[still_idx]['time'] - rt['start_time']) * 1000, 0))
+                    else:
+                        stop_reaction_ms = 0
+                else:
+                    stop_reaction_ms = 0
+            
+            all_stop_reactions.append(stop_reaction_ms)
+            
+            red_magnitudes = [
+                m['magnitude'] for m in self.session_data['movement_data']
+                if m['phase'] == 'red' and rt['start_time'] <= m['time'] <= rt['end_time']
+            ]
+            freeze_quality = round(float(np.std(red_magnitudes)), 4) if len(red_magnitudes) > 1 else 0.0
+            all_freeze_qualities.append(freeze_quality)
+            
+            if false_start:
+                false_start_count += 1
+            
+            export_trials.append({
+                "trialIndex": i + 1,
+                "phase": "GreenLight",
+                "stopSignalDelayMs": 0,
+                "movementIntensity": movement_intensity,
+                "transition": {
+                    "stopReactionTimeMs": stop_reaction_ms,
+                    "freezeQuality": freeze_quality,
+                    "falseStart": false_start
+                }
+            })
+        
+        output = {
+            "userId": self.child_id,
+            "sessionId": self.session_id,
+            "gameType": "RedLightGreenLight",
+            "timestamp": datetime.now().isoformat(),
+            "previousSessionsCount": 0,
+            "trials": export_trials,
+            "sessionSummary": {
+                "averageStopReactionTimeMs": round(np.mean(all_stop_reactions), 0) if all_stop_reactions else 0,
+                "falseStartCount": false_start_count,
+                "averageFreezeQuality": round(np.mean(all_freeze_qualities), 4) if all_freeze_qualities else 0,
+                "movementIntensityOverall": round(np.mean(all_intensities), 4) if all_intensities else 0,
+                "totalTrials": num_pairs
+            }
+        }
+        
         json_filename = f"session_data/{self.child_id}_{self.session_id}.json"
         with open(json_filename, 'w', encoding='utf-8') as f:
-            json.dump(self.session_data, f, indent=2, ensure_ascii=False)
-            
-        # حفظ بصيغة CSV للملخص
-        csv_filename = f"session_data/{self.child_id}_{self.session_id}_summary.csv"
-        with open(csv_filename, 'w', newline='', encoding='utf-8') as f:
-            writer = csv.writer(f)
-            writer.writerow(['Metric', 'Value'])
-            for key, value in self.session_data['summary'].items():
-                writer.writerow([key, value])
-                
-        # حفظ بيانات المحاولات في CSV منفصل
-        trials_csv = f"session_data/{self.child_id}_{self.session_id}_trials.csv"
-        with open(trials_csv, 'w', newline='', encoding='utf-8') as f:
-            if self.session_data['trials']:
-                writer = csv.DictWriter(f, fieldnames=self.session_data['trials'][0].keys())
-                writer.writeheader()
-                writer.writerows(self.session_data['trials'])
-                
-        # حفظ في قاعدة البيانات الموحدة SQLite
-        try:
-            db = GameDatabase()
-            summary = self.session_data['summary']
-            session_summary = {
-                "child_id": self.child_id,
-                "session_id": self.session_id,
-                "game_name": "Green Light",
-                "start_time": datetime.fromtimestamp(self.session_start).isoformat(),
-                "duration_minutes": round((time.time() - self.session_start) / 60, 2),
-                "total_trials": summary.get('total_trials', 0),
-                "success_rate": round(summary.get('success_rate', 0.0), 2),
-                "impulsivity_index": round(summary.get('impulsivity_index', 0.0), 2),
-                "motor_control_score": round(summary.get('motor_control_score', 0.0), 2),
-                "distraction_score": round(summary.get('distraction_score', 0.0), 2),
-                "avg_reaction_time": round(summary.get('avg_reaction_time', 0.0), 2),
-                "max_consecutive_success": summary.get('max_consecutive_success', 0),
-                "false_moves": summary.get('false_moves', 0),
-                "false_stops": summary.get('false_stops', 0),
-                "red_phase_errors": summary.get('false_moves', 0),
-                "green_phase_errors": summary.get('false_stops', 0)
-            }
-            db.save_session(session_summary, sync_remote=False)
-            
-            # حفظ المحاولات الفردية
-            for trial in self.session_data['trials']:
-                success = 1 if trial['success'] else 0
-                react = 0.0
-                if trial['motion_time'] and trial['phase'] == 'green':
-                    react = round(trial['motion_time'] - trial['start_time'], 2)
-                db.save_round(
-                    self.session_id,
-                    self.child_id,
-                    "Green Light",
-                    trial['phase'].capitalize() + " Light",
-                    react,
-                    success,
-                    round(trial['actual_duration'], 2) if not trial['motion_detected'] else 0.0,
-                    1 if (trial['phase'] == 'red' and trial['motion_detected']) else 0,
-                    stability=0.0,
-                    is_premature=0
-                )
-            print("💾 SQLite Database: Session & trials successfully saved!")
-        except Exception as e:
-            print(f"⚠️ خطأ أثناء حفظ البيانات في قاعدة البيانات: {e}")
-
-        print(f"\n✅ تم حفظ البيانات في:")
-        print(f"   - {json_filename}")
-        print(f"   - {csv_filename}")
-        print(f"   - {trials_csv}")
+            json.dump(output, f, indent=2, ensure_ascii=False)
+        
+        print(f"\nData saved to: {json_filename}")
         
         return json_filename
 
 
-# BGR Color Palette (OpenCV BGR Format)
-COLOR_DARK = (10, 10, 10)
-COLOR_SLATE = (59, 41, 30)
-COLOR_INDIGO = (241, 102, 99)       # Primary Accent Indigo
-COLOR_LIGHT_INDIGO = (248, 140, 129) # Hover Accent
-COLOR_EMERALD = (129, 185, 16)      # Safe Green Light Color
-COLOR_ROSE = (94, 63, 244)          # Danger Red Light Color
-COLOR_AMBER = (11, 158, 245)         # Warning Amber Color
-COLOR_WHITE = (255, 255, 255)
-COLOR_GRAY = (200, 200, 200)
-
+_game_instance = None
 mouse_pos = (0, 0)
 mouse_click_pos = None
 
@@ -420,41 +444,11 @@ def mouse_callback(event, x, y, flags, param):
         mouse_click_pos = (x, y)
 
 
-def draw_glass_panel(img, x, y, w, h, bg_color=(20, 20, 20), border_color=COLOR_INDIGO, alpha=0.45, border_thickness=1, corner_radius=15):
-    """Draws a beautiful semi-transparent glass panel with rounded corners and a border"""
-    overlay = img.copy()
-    r = corner_radius
-    
-    # Draw rounded rectangle on overlay
-    cv2.circle(overlay, (x + r, y + r), r, bg_color, -1)
-    cv2.circle(overlay, (x + w - r, y + r), r, bg_color, -1)
-    cv2.circle(overlay, (x + r, y + h - r), r, bg_color, -1)
-    cv2.circle(overlay, (x + w - r, y + h - r), r, bg_color, -1)
-    cv2.rectangle(overlay, (x + r, y), (x + w - r, y + h), bg_color, -1)
-    cv2.rectangle(overlay, (x, y + r), (x + w, y + h - r), bg_color, -1)
-    
-    # Apply alpha transparency
-    cv2.addWeighted(overlay, alpha, img, 1 - alpha, 0, img)
-    
-    # Draw border on frame with anti-aliasing
-    cv2.ellipse(img, (x + r, y + r), (r, r), 180, 0, 90, border_color, border_thickness, cv2.LINE_AA)
-    cv2.ellipse(img, (x + w - r, y + r), (r, r), 270, 0, 90, border_color, border_thickness, cv2.LINE_AA)
-    cv2.ellipse(img, (x + w - r, y + h - r), (r, r), 0, 0, 90, border_color, border_thickness, cv2.LINE_AA)
-    cv2.ellipse(img, (x + r, y + h - r), (r, r), 90, 0, 90, border_color, border_thickness, cv2.LINE_AA)
-    
-    cv2.line(img, (x + r, y), (x + w - r, y), border_color, border_thickness, cv2.LINE_AA)
-    cv2.line(img, (x + w, y + r), (x + w, y + h - r), border_color, border_thickness, cv2.LINE_AA)
-    cv2.line(img, (x + r, y + h), (x + w - r, y + h), border_color, border_thickness, cv2.LINE_AA)
-    cv2.line(img, (x, y + r), (x, y + h - r), border_color, border_thickness, cv2.LINE_AA)
-
-
 def draw_glowing_circle(img, center, radius, color, glow_color, thickness=3, pulse_speed=5):
-    """Draws a stunning glowing neon orb with concentric circles for ambient bloom"""
     t = time.time() * pulse_speed
     pulse = np.sin(t) * 4
     r = int(radius + pulse)
     
-    # Ambient glow rings
     overlay = img.copy()
     cv2.circle(overlay, center, r + 25, glow_color, 8, cv2.LINE_AA)
     cv2.addWeighted(overlay, 0.08, img, 0.92, 0, img)
@@ -467,20 +461,17 @@ def draw_glowing_circle(img, center, radius, color, glow_color, thickness=3, pul
     cv2.circle(overlay, center, r + 5, glow_color, -1, cv2.LINE_AA)
     cv2.addWeighted(overlay, 0.25, img, 0.75, 0, img)
     
-    # Core circle
     cv2.circle(img, center, r, color, -1, cv2.LINE_AA)
     cv2.circle(img, center, r, COLOR_WHITE, 2, cv2.LINE_AA)
 
 
 def draw_circular_progress(img, center, radius, progress, color, thickness=4):
-    """Draws a circular progress ring for the active phase remaining duration"""
     end_angle = int(360 * progress) - 90
     cv2.ellipse(img, center, (radius, radius), 0, -90, end_angle, color, thickness, cv2.LINE_AA)
     cv2.ellipse(img, center, (radius, radius), 0, -90, 270, (40, 40, 40), 1, cv2.LINE_AA)
 
 
 def draw_motion_visualizer(img, x, y, w, h, magnitude, max_val=50, threshold=15, bg_color=(20, 20, 20)):
-    """Draws a sleek motion visualizer bar with live color shift from safe Green to alert Red"""
     draw_glass_panel(img, x, y, w, h, bg_color, (80, 80, 80), 0.5, 1, 8)
     
     mag = min(max_val, magnitude)
@@ -505,15 +496,12 @@ def draw_motion_visualizer(img, x, y, w, h, magnitude, max_val=50, threshold=15,
 
 
 def draw_end_screen(img, state, summary_data):
-    """Draws a beautifully structured post-session performance analytics summary"""
     h, w, _ = img.shape
     
-    # Fade screen background
     overlay = img.copy()
     cv2.rectangle(overlay, (0, 0), (w, h), COLOR_DARK, -1)
     cv2.addWeighted(overlay, 0.82, img, 0.18, 0, img)
     
-    # Metrics Container Card
     card_w, card_h = 750, 480
     card_x, card_y = (w - card_w) // 2, (h - card_h) // 2
     
@@ -530,12 +518,10 @@ def draw_end_screen(img, state, summary_data):
         
     draw_glass_panel(img, card_x, card_y, card_w, card_h, (20, 20, 20), border_color, 0.65, 2, 20)
     
-    # Title & subtitle
     cv2.putText(img, title_text, (card_x + 50, card_y + 65), cv2.FONT_HERSHEY_SIMPLEX, 1.2, title_color, 3, cv2.LINE_AA)
     cv2.putText(img, desc_text, (card_x + 50, card_y + 105), cv2.FONT_HERSHEY_SIMPLEX, 0.5, COLOR_GRAY, 1, cv2.LINE_AA)
     cv2.line(img, (card_x + 50, card_y + 130), (card_x + card_w - 50, card_y + 130), (70, 70, 70), 1, cv2.LINE_AA)
     
-    # Analytics Grid Data
     metrics = [
         ("Session Duration", f"{summary_data.get('session_duration', 0):.1f}s", COLOR_WHITE),
         ("Total Trials", f"{summary_data.get('total_trials', 0)}", COLOR_WHITE),
@@ -561,422 +547,293 @@ def draw_end_screen(img, state, summary_data):
         val_size = cv2.getTextSize(val, cv2.FONT_HERSHEY_SIMPLEX, 0.45, 2)[0]
         cv2.putText(img, val, (curr_x + col_w - 35 - val_size[0], curr_y + 6), cv2.FONT_HERSHEY_SIMPLEX, 0.45, val_color, 2, cv2.LINE_AA)
         
-    # Closing interaction
     cv2.line(img, (card_x + 50, card_y + card_h - 80), (card_x + card_w - 50, card_y + card_h - 80), (70, 70, 70), 1, cv2.LINE_AA)
     cv2.putText(img, "Press 'Q' or any key to return to Dashboard...", (card_x + 50, card_y + card_h - 40), cv2.FONT_HERSHEY_SIMPLEX, 0.55, COLOR_INDIGO, 2, cv2.LINE_AA)
 
 
-# ========== إعدادات اللعبة ==========
-import sys
-GREEN_LIGHT_DURATION = 5.5
-RED_LIGHT_DURATION = 3.5
-COUNTDOWN_TIME = 60
-CHILD_ID = "CHILD001"  # يمكن تغييره لكل طفل
-if len(sys.argv) > 1:
-    CHILD_ID = sys.argv[1]
-# ======================================
+class GreenLightGame:
+    GREEN_LIGHT_DURATION = 3.0
+    RED_LIGHT_DURATION = 6.0
+    COUNTDOWN_TIME = 60
 
-# تهيئة الكائنات
-md = MotionDetector()
-data_collector = GameDataCollector(child_id=CHILD_ID)
+    def __init__(self, child_id="CHILD001"):
+        self.child_id = child_id
+        self.md = MotionDetector()
+        self.data_collector = GameDataCollector(child_id=child_id)
+        self.target_resolution = (640, 480)
+        self.cap = self._init_camera()
+        self.frame_count = 0
+        self._lighting_status = "good"
 
-cap = cv2.VideoCapture(3)
+        self.game_state = "DIFFICULTY_SELECT"
+        self.selected_difficulty = "MEDIUM"
+        self.allowed_mistakes = 1
+        self.mistakes_count = 0
+        self.last_mistake_time = 0
+        self.start_time = 0
+        self.elapsed_time = 0
+        self.game_over = False
+        self.motiond = 0
+        self.end = 0
+        self.last_color_change_time = time.time()
+        self.current_phase = "green"
+        self.remaining_time = self.COUNTDOWN_TIME
 
-# Difficulty Selection and Mistake Parameters
-game_state = "DIFFICULTY_SELECT"
-selected_difficulty = "MEDIUM"
-allowed_mistakes = 1
-mistakes_count = 0
-last_mistake_time = 0
+        self.data_collector.session_data['session_info']['green_light_duration'] = self.GREEN_LIGHT_DURATION
+        self.data_collector.session_data['session_info']['red_light_duration'] = self.RED_LIGHT_DURATION
 
-start_time = cv2.getTickCount()
-countdown_time = COUNTDOWN_TIME
-elapsed_time = 0
-game_over = False
-motiond = 0
-end = 0
+        self.button_x, self.button_y = 490, 520
+        self.button_width, self.button_height = 300, 65
+        self.button_text = "SURVIVED! CLICK TO WIN"
 
-last_color_change_time = time.time()
-current_phase = "green"
+    def _init_camera(self):
+        for idx in range(5):
+            cap = cv2.VideoCapture(idx, cv2.CAP_DSHOW)
+            if cap.isOpened():
+                ret, _ = cap.read()
+                if ret:
+                    cap.set(cv2.CAP_PROP_FRAME_WIDTH, self.target_resolution[0])
+                    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, self.target_resolution[1])
+                    return cap
+                cap.release()
+        print("[ERROR] No camera detected. Using fallback index 0.")
+        cap = cv2.VideoCapture(0, cv2.CAP_DSHOW)
+        if not cap.isOpened():
+            print("[CRITICAL] Camera failed to open. Please check connection.")
+            sys.exit(1)
+        return cap
 
-# تحديث مدة الجلسة في data_collector
-data_collector.session_data['session_info']['green_light_duration'] = GREEN_LIGHT_DURATION
-data_collector.session_data['session_info']['red_light_duration'] = RED_LIGHT_DURATION
+    def run(self):
+        global mouse_pos, mouse_click_pos
+        cv2.namedWindow('ADHD Training Game')
+        cv2.setMouseCallback('ADHD Training Game', mouse_callback)
 
-# إعدادات الزر (Centered and Floating Bottom-Center)
-button_x, button_y = 490, 520
-button_width, button_height = 300, 65
-button_text = "SURVIVED! CLICK TO WIN"
+        while True:
+            ret, frame = self.cap.read()
+            if not ret:
+                frame = np.zeros((720, 1280, 3), dtype=np.uint8)
+                cv2.putText(frame, "Camera Lost! Please reconnect.", (300, 360), cv2.FONT_HERSHEY_SIMPLEX, 1.2, COLOR_ROSE, 3, cv2.LINE_AA)
+                cv2.imshow('ADHD Training Game', frame)
+                if cv2.waitKey(1) & 0xFF == ord('q'):
+                    break
+                continue
 
-cv2.namedWindow('ADHD Training Game')
-cv2.setMouseCallback('ADHD Training Game', mouse_callback)
+            frame = cv2.resize(frame, (1280, 720))
+            frame = cv2.flip(frame, 1)
+            self.frame_count += 1
 
+            if self.game_state == "DIFFICULTY_SELECT":
+                self._handle_difficulty_select(frame)
+                cv2.imshow('ADHD Training Game', frame)
+                if cv2.waitKey(1) & 0xFF == ord('q'):
+                    break
+                continue
 
-def _send_green_light_to_api(data_collector):
-    """Send Green Light session data to .NET backend API"""
-    child_id = data_collector.child_id
-    trials_raw = data_collector.session_data.get('trials', [])
-    summary = data_collector.session_data.get('summary', {})
+            motion_detected, motion_magnitude = self.md.detect_motion(frame)
+            self.data_collector.record_motion(motion_detected, motion_magnitude)
 
-    api_trials = []
-    for i, t in enumerate(trials_raw):
-        phase_name = "GreenLight" if t['phase'] == 'green' else "RedLight"
-        trial = {
-            "trialIndex": i + 1,
-            "phase": phase_name,
-            "stopSignalDelayMs": None,
-            "movementIntensity": None,
-            "stopReactionTimeMs": None,
-            "freezeQuality": None,
-            "falseStart": None
-        }
-        if t['phase'] == 'green':
-            trial["stopSignalDelayMs"] = 0
-            trial["movementIntensity"] = round(min(1.0, t.get('motion_magnitude', 0) / 50.0), 4)
-            if t['motion_detected'] and t['motion_time'] and t['start_time']:
-                trial["stopReactionTimeMs"] = int((t['motion_time'] - t['start_time']) * 1000)
-        else:
-            if t['motion_detected']:
-                trial["falseStart"] = True
-                if t['motion_time'] and t['start_time']:
-                    trial["stopSignalDelayMs"] = int((t['motion_time'] - t['start_time']) * 1000)
-            else:
-                trial["falseStart"] = False
-                actual = t.get('actual_duration', 0)
-                expected = t.get('expected_duration', 1)
-                if expected > 0:
-                    trial["freezeQuality"] = round(min(1.0, actual / expected), 4)
-        api_trials.append(trial)
+            if hasattr(self.md, 'last_raw_landmarks') and self.md.last_raw_landmarks is not None:
+                skeleton_state = "error" if (self.current_phase == "red" and motion_detected) else "success"
+                self.md.pose_engine.draw_landmarks(frame, self.md.last_raw_landmarks, match_state=skeleton_state)
 
-    api_session_id = create_session(child_id, "green_light")
-    if api_session_id:
-        if api_trials:
-            save_green_light_trials(api_session_id, api_trials)
-        avg_react_ms = summary.get('avg_reaction_time', 0) * 1000
-        total_trials = summary.get('total_trials', 0)
-        false_moves = summary.get('false_moves', 0)
+            current_time = time.time()
+            phase_duration = self.GREEN_LIGHT_DURATION if self.current_phase == "green" else self.RED_LIGHT_DURATION
 
-        # Compute average freeze quality from trials
-        freeze_qualities = [t.get("freezeQuality") for t in api_trials if t.get("freezeQuality") is not None]
-        avg_freeze_quality = round(sum(freeze_qualities) / len(freeze_qualities), 4) if freeze_qualities else None
+            if current_time - self.last_color_change_time > phase_duration:
+                self.data_collector.end_phase(self.current_phase)
+                self.last_color_change_time = current_time
+                if self.current_phase == "green":
+                    self.current_phase = "red"
+                    play_sound(red_sound)
+                else:
+                    self.current_phase = "green"
+                    play_sound(green_sound)
+                self.data_collector.start_phase(self.current_phase, phase_duration)
 
-        # Compute overall movement intensity from trials
-        intensities = [t.get("movementIntensity") for t in api_trials if t.get("movementIntensity") is not None]
-        avg_movement_intensity = round(sum(intensities) / len(intensities), 4) if intensities else None
+            phase_time_left = max(0.0, phase_duration - (current_time - self.last_color_change_time))
 
-        save_summary(api_session_id, {
-            "totalTrials": total_trials,
-            "averageStopReactionTimeMs": round(avg_react_ms, 0),
-            "falseStartCount": false_moves,
-            "averageFreezeQuality": avg_freeze_quality,
-            "movementIntensityOverall": avg_movement_intensity
-        })
+            if not self.game_over:
+                self.elapsed_time = (cv2.getTickCount() - self.start_time) / cv2.getTickFrequency()
+                self.remaining_time = max(0, self.COUNTDOWN_TIME - int(self.elapsed_time))
+                if self.remaining_time <= 0 or self.motiond == 1:
+                    self.game_over = True
 
+            self._draw_hud(frame, motion_detected, motion_magnitude, current_time, phase_time_left, phase_duration)
 
-def put_centered_text(img, text, cx, cy, font, scale, color, thickness):
-    """Utility to draw perfectly centered text around a target coordinate"""
-    size = cv2.getTextSize(text, font, scale, thickness)[0]
-    tx = cx - size[0] // 2
-    ty = cy + size[1] // 2
-    cv2.putText(img, text, (tx, ty), font, scale, color, thickness, cv2.LINE_AA)
+            if motion_detected and self.current_phase == "red":
+                if current_time - self.last_mistake_time > 2.0:
+                    self.mistakes_count += 1
+                    self.last_mistake_time = current_time
+                    self.data_collector.session_data['false_moves'].append({
+                        'time': current_time,
+                        'reaction_time': current_time - self.last_color_change_time
+                    })
+                    self.data_collector.last_error_time = current_time
+                    self.data_collector.consecutive_success = 0
+                    if self.mistakes_count > self.allowed_mistakes:
+                        self.motiond = 1
+                        self.game_over = True
 
+            if current_time - self.last_mistake_time < 2.0 and self.mistakes_count > 0 and not self.game_over:
+                overlay = frame.copy()
+                cv2.rectangle(overlay, (0, 0), (1280, 720), (0, 0, 100), -1)
+                cv2.addWeighted(overlay, 0.25, frame, 0.75, 0, frame)
+                put_centered_text(frame, f"WARNING! YOU MOVED! ({self.mistakes_count}/{self.allowed_mistakes + 1})", 640, 360, cv2.FONT_HERSHEY_SIMPLEX, 1.2, COLOR_ROSE, 3)
 
-# ========== GAMEPLAY LOOP ==========
-while True:
-    ret, frame = cap.read()
-    if not ret:
-        break
+            button_clicked = False
+            if mouse_click_pos is not None:
+                xc, yc = mouse_click_pos
+                if (self.button_x <= xc <= self.button_x + self.button_width and self.button_y <= yc <= self.button_y + self.button_height):
+                    button_clicked = True
+                mouse_click_pos = None
 
-    frame = cv2.resize(frame, (1280, 720))
-    # Flip camera horizontally for intuitive user coordination mirror effect
-    frame = cv2.flip(frame, 1)
+            if (cv2.waitKey(1) & 0xFF == ord('k')) or button_clicked:
+                self._end_game("WIN", frame)
+                break
 
-    if game_state == "DIFFICULTY_SELECT":
+            if self.game_over and self.end == 0:
+                self._end_game("LOSE", frame)
+                break
+
+            cv2.imshow('ADHD Training Game', frame)
+            if cv2.waitKey(1) & 0xFF == ord('q'):
+                break
+
+        self._print_summary()
+        self.cap.release()
+        cv2.destroyAllWindows()
+
+    def _handle_difficulty_select(self, frame):
+        global mouse_click_pos
         h, w, _ = frame.shape
-        
-        # Dark overlay background
+
         overlay = frame.copy()
         cv2.rectangle(overlay, (0, 0), (w, h), COLOR_DARK, -1)
         cv2.addWeighted(overlay, 0.7, frame, 0.3, 0, frame)
-        
-        # Central Dialog Container
+
         draw_glass_panel(frame, w//4, h//8, w//2, 3*h//4, (15, 15, 15), COLOR_INDIGO, 0.75, 2, 20)
-        
         put_centered_text(frame, "SELECT DIFFICULTY LEVEL", w//2, h//8 + 45, cv2.FONT_HERSHEY_SIMPLEX, 0.85, COLOR_WHITE, 3)
-        put_centered_text(frame, "اختر مستوى الصعوبة لبدء التدريب", w//2, h//8 + 85, cv2.FONT_HERSHEY_SIMPLEX, 0.55, COLOR_GRAY, 1)
-        
-        # Difficulty Buttons coordinates
+        put_centered_text(frame, "Select difficulty level to begin training", w//2, h//8 + 85, cv2.FONT_HERSHEY_SIMPLEX, 0.55, COLOR_GRAY, 1)
+
         btn_w, btn_h = 440, 75
         btn_x = (w - btn_w) // 2
-        
-        # Buttons definitions: (y, label, desc, color, difficulty_id)
         buttons_info = [
-            (h//8 + 140, "EASY - سهل", "Sensitivity: Low (30) | Mistakes allowed: 3", COLOR_EMERALD, "EASY"),
-            (h//8 + 245, "MEDIUM - متوسط", "Sensitivity: Medium (15) | Mistakes allowed: 1", COLOR_AMBER, "MEDIUM"),
-            (h//8 + 350, "HARD - صعب", "Sensitivity: High (8) | Mistakes allowed: 0", COLOR_ROSE, "HARD")
+            (h//8 + 140, "EASY", "Sensitivity: Medium (50) | Mistakes allowed: 3", COLOR_EMERALD, "EASY"),
+            (h//8 + 245, "MEDIUM", "Sensitivity: Medium (35) | Mistakes allowed: 1", COLOR_AMBER, "MEDIUM"),
+            (h//8 + 350, "HARD", "Sensitivity: Medium (20) | Mistakes allowed: 0", COLOR_ROSE, "HARD")
         ]
-        
-        # Check mouse hover and click
+
         button_clicked = None
         for y, label, desc, color, diff in buttons_info:
             is_hovered = (btn_x <= mouse_pos[0] <= btn_x + btn_w and y <= mouse_pos[1] <= y + btn_h)
             btn_border = COLOR_LIGHT_INDIGO if is_hovered else color
             btn_alpha = 0.85 if is_hovered else 0.55
-            
             draw_glass_panel(frame, btn_x, y, btn_w, btn_h, (20, 20, 20), btn_border, btn_alpha, 2 if is_hovered else 1, 15)
             put_centered_text(frame, label, w//2, y + btn_h//2 - 12, cv2.FONT_HERSHEY_SIMPLEX, 0.6, COLOR_WHITE, 2)
             put_centered_text(frame, desc, w//2, y + btn_h//2 + 18, cv2.FONT_HERSHEY_SIMPLEX, 0.42, COLOR_GRAY, 1)
-            
             if is_hovered and mouse_click_pos is not None:
                 button_clicked = diff
-                
-        # Clear click position
+
         if mouse_click_pos is not None:
             mouse_click_pos = None
-            
+
         if button_clicked is not None:
-            selected_difficulty = button_clicked
-            if button_clicked == "EASY":
-                md.threshold = 30.0
-                allowed_mistakes = 3
-            elif button_clicked == "MEDIUM":
-                md.threshold = 15.0
-                allowed_mistakes = 1
+            self.selected_difficulty = button_clicked
+            config = {"EASY": (15.0, 3), "MEDIUM": (15.0, 1), "HARD": (15.0, 0)}
+            self.md.threshold, self.allowed_mistakes = config[button_clicked]
+            self.game_state = "PLAYING"
+            self.start_time = cv2.getTickCount()
+            self.last_color_change_time = time.time()
+            self.data_collector.session_start = time.time()
+            self.data_collector.start_phase(self.current_phase, self.GREEN_LIGHT_DURATION)
+            play_sound(green_sound)
+
+    def _draw_hud(self, frame, motion_detected, motion_magnitude, current_time, phase_time_left, phase_duration):
+        fps = self.md.pose_engine.get_fps()
+        fps_color = COLOR_EMERALD if fps >= 20 else (COLOR_AMBER if fps >= 10 else COLOR_ROSE)
+
+        if self.frame_count % 30 == 0:
+            _, self._lighting_status = self.md.pose_engine.estimate_lighting(frame)
+        light_color = COLOR_EMERALD if self._lighting_status == 'good' else (COLOR_AMBER if self._lighting_status == 'low' else COLOR_ROSE)
+
+        draw_glass_panel(frame, 20, 15, 1240, 55, (15, 15, 15), COLOR_INDIGO, 0.45, 1, 10)
+        cv2.putText(frame, f"ADHD SENSORY TRAINING: {self.selected_difficulty}", (45, 50), cv2.FONT_HERSHEY_SIMPLEX, 0.65, COLOR_WHITE, 2, cv2.LINE_AA)
+        cv2.putText(frame, f"FPS: {fps}", (480, 50), cv2.FONT_HERSHEY_SIMPLEX, 0.6, fps_color, 2, cv2.LINE_AA)
+        cv2.putText(frame, f"LIGHT: {self._lighting_status}", (590, 50), cv2.FONT_HERSHEY_SIMPLEX, 0.6, light_color, 2, cv2.LINE_AA)
+        cv2.putText(frame, f"MISTAKES: {self.mistakes_count} / {self.allowed_mistakes + 1}", (750, 50), cv2.FONT_HERSHEY_SIMPLEX, 0.6, COLOR_ROSE if self.mistakes_count > 0 else COLOR_WHITE, 2, cv2.LINE_AA)
+        timer_str = f"TIME LEFT: {self.remaining_time}s"
+        timer_size = cv2.getTextSize(timer_str, cv2.FONT_HERSHEY_SIMPLEX, 0.6, 2)[0]
+        cv2.putText(frame, timer_str, (1230 - timer_size[0], 50), cv2.FONT_HERSHEY_SIMPLEX, 0.6, COLOR_WHITE, 2, cv2.LINE_AA)
+
+        active_core = COLOR_EMERALD if self.current_phase == "green" else COLOR_ROSE
+        active_glow = (120, 230, 120) if self.current_phase == "green" else (120, 120, 255)
+        phase_label = "GREEN LIGHT: GO!" if self.current_phase == "green" else "RED LIGHT: FREEZE!"
+        active_border = active_core
+
+        draw_glass_panel(frame, 20, 85, 300, 340, (20, 20, 20), active_border, 0.5, 2, 15)
+        put_centered_text(frame, "TRAFFIC STATUS", 170, 115, cv2.FONT_HERSHEY_SIMPLEX, 0.45, COLOR_GRAY, 1)
+        put_centered_text(frame, phase_label, 170, 145, cv2.FONT_HERSHEY_SIMPLEX, 0.65, active_core, 2)
+        draw_glowing_circle(frame, (170, 240), 50, active_core, active_glow, 3)
+        phase_pct = max(0.0, min(1.0, phase_time_left / phase_duration))
+        draw_circular_progress(frame, (170, 240), 65, phase_pct, active_core, 4)
+        put_centered_text(frame, f"{phase_time_left:.1f}s left", 170, 335, cv2.FONT_HERSHEY_SIMPLEX, 0.45, COLOR_WHITE, 1)
+        put_centered_text(frame, f"ROUND {len(self.data_collector.session_data['trials']) + 1}", 170, 365, cv2.FONT_HERSHEY_SIMPLEX, 0.5, COLOR_GRAY, 1)
+
+        self.data_collector.generate_summary()
+        summary = self.data_collector.session_data['summary']
+
+        draw_glass_panel(frame, 960, 85, 300, 340, (20, 20, 20), COLOR_INDIGO, 0.5, 1, 15)
+        put_centered_text(frame, "PERFORMANCE ANALYTICS", 1110, 115, cv2.FONT_HERSHEY_SIMPLEX, 0.45, COLOR_GRAY, 1)
+
+        if summary:
+            for i, (key, label) in enumerate([("success_rate", "Success Rate"), ("motor_control_score", "Stillness Rating"), ("impulsivity_index", "Impulsivity Score")]):
+                val = summary.get(key, 0)
+                colors = [COLOR_EMERALD, COLOR_INDIGO, COLOR_ROSE]
+                cv2.putText(frame, f"{label}: {val:.0f}%", (990, 160 + i*55), cv2.FONT_HERSHEY_SIMPLEX, 0.4, COLOR_WHITE, 1, cv2.LINE_AA)
+                cv2.rectangle(frame, (990, 172 + i*55), (1230, 178 + i*55), (40, 40, 40), -1)
+                cv2.rectangle(frame, (990, 172 + i*55), (990 + int(min(val, 100) * 2.4), 178 + i*55), colors[i], -1)
+
+            avg_react = summary.get('avg_reaction_time', 0)
+            cv2.putText(frame, f"Avg Reaction: {avg_react:.2f}s", (990, 325), cv2.FONT_HERSHEY_SIMPLEX, 0.4, COLOR_WHITE, 1, cv2.LINE_AA)
+            cv2.rectangle(frame, (990, 337), (1230, 343), (40, 40, 40), -1)
+            cv2.rectangle(frame, (990, 337), (990 + min(240, int(avg_react * 80)), 343), COLOR_AMBER, -1)
+
+        is_btn_hovered = (self.button_x <= mouse_pos[0] <= self.button_x + self.button_width and self.button_y <= mouse_pos[1] <= self.button_y + self.button_height)
+        btn_border = COLOR_LIGHT_INDIGO if is_btn_hovered else COLOR_INDIGO
+        draw_glass_panel(frame, self.button_x, self.button_y, self.button_width, self.button_height, (15, 15, 15), btn_border, 0.75 if is_btn_hovered else 0.5, 2 if is_btn_hovered else 1, 15)
+        put_centered_text(frame, self.button_text, self.button_x + self.button_width // 2, self.button_y + self.button_height // 2, cv2.FONT_HERSHEY_SIMPLEX, 0.55, COLOR_WHITE, 2)
+
+        draw_motion_visualizer(frame, 20, 630, 1240, 60, motion_magnitude, max_val=max(50.0, self.md.threshold * 2.5), threshold=self.md.threshold)
+
+    def _end_game(self, state, frame):
+        self.data_collector.end_phase(self.current_phase)
+        self.data_collector.generate_summary()
+        self.data_collector.save_data()
+
+        while True:
+            draw_end_screen(frame, state, self.data_collector.session_data['summary'])
+            cv2.imshow('ADHD Training Game', frame)
+            key = cv2.waitKey(1) & 0xFF
+            if key != 255:
+                break
+        self.end = 1
+
+    def _print_summary(self):
+        print("\n" + "="*50)
+        print("FINAL SESSION SUMMARY")
+        print("="*50)
+        summary = self.data_collector.session_data['summary']
+        for key, value in summary.items():
+            if isinstance(value, float):
+                print(f"{key}: {value:.2f}")
             else:
-                md.threshold = 8.0
-                allowed_mistakes = 0
-                
-            # Transition to playing state
-            game_state = "PLAYING"
-            start_time = cv2.getTickCount()
-            last_color_change_time = time.time()
-            data_collector.session_start = time.time()
-            data_collector.start_phase(current_phase, GREEN_LIGHT_DURATION)
-            play_sound(green_sound)
-            
-        cv2.imshow('ADHD Training Game', frame)
-        if cv2.waitKey(1) & 0xFF == ord('q'):
-            break
-        continue
+                print(f"{key}: {value}")
 
-    # Detect movement sensor values
-    motion_detected, motion_magnitude = md.detect_motion(frame)
-    data_collector.record_motion(motion_detected, motion_magnitude)
 
-    # Draw Pose Skeleton Overlay
-    if hasattr(md, 'last_raw_landmarks') and md.last_raw_landmarks is not None:
-        if current_phase == "red":
-            skeleton_state = "error" if motion_detected else "success"
-        else:
-            skeleton_state = "success"
-        md.pose_engine.draw_landmarks(frame, md.last_raw_landmarks, match_state=skeleton_state)
-
-    current_time = time.time()
-
-    # Get duration of current state
-    if current_phase == "green":
-        phase_duration = GREEN_LIGHT_DURATION
-    else:
-        phase_duration = RED_LIGHT_DURATION
-
-    # Check phase timers for transitioning
-    if current_time - last_color_change_time > phase_duration:
-        data_collector.end_phase(current_phase)
-        last_color_change_time = current_time
-
-        if current_phase == "green":
-            current_phase = "red"
-            play_sound(red_sound)
-        else:
-            current_phase = "green"
-            play_sound(green_sound)
-            
-        data_collector.start_phase(current_phase, phase_duration)
-
-    phase_time_left = max(0.0, phase_duration - (current_time - last_color_change_time))
-
-    # Overall timer countdown
-    if not game_over:
-        elapsed_time = (cv2.getTickCount() - start_time) / cv2.getTickFrequency()
-        remaining_time = max(0, countdown_time - int(elapsed_time))
-        if remaining_time <= 0 or motiond == 1:
-            game_over = True
-    else:
-        remaining_time = max(0, countdown_time - int(elapsed_time))
-
-    # --- Draw Glassmorphic HUD ---
-
-    # 1. Top Header panel
-    draw_glass_panel(frame, 20, 15, 1240, 55, (15, 15, 15), COLOR_INDIGO, 0.45, 1, 10)
-    cv2.putText(frame, f"ADHD SENSORY TRAINING: {selected_difficulty}", (45, 50), cv2.FONT_HERSHEY_SIMPLEX, 0.65, COLOR_WHITE, 2, cv2.LINE_AA)
-    
-    # Draw mistakes count in red if mistake made, otherwise white
-    mistakes_str = f"MISTAKES: {mistakes_count} / {allowed_mistakes + 1}"
-    cv2.putText(frame, mistakes_str, (700, 50), cv2.FONT_HERSHEY_SIMPLEX, 0.6, COLOR_ROSE if mistakes_count > 0 else COLOR_WHITE, 2, cv2.LINE_AA)
-    
-    timer_str = f"TIME LEFT: {remaining_time}s"
-    timer_size = cv2.getTextSize(timer_str, cv2.FONT_HERSHEY_SIMPLEX, 0.6, 2)[0]
-    cv2.putText(frame, timer_str, (1230 - timer_size[0], 50), cv2.FONT_HERSHEY_SIMPLEX, 0.6, COLOR_WHITE, 2, cv2.LINE_AA)
-
-    # Pick colors based on active phase
-    if current_phase == "green":
-        active_border = COLOR_EMERALD
-        active_core = COLOR_EMERALD
-        active_glow = (120, 230, 120)
-        phase_label = "GREEN LIGHT: GO!"
-    else:
-        active_border = COLOR_ROSE
-        active_core = COLOR_ROSE
-        active_glow = (120, 120, 255)
-        phase_label = "RED LIGHT: FREEZE!"
-
-    # 2. Left Traffic status widget
-    draw_glass_panel(frame, 20, 85, 300, 340, (20, 20, 20), active_border, 0.5, 2, 15)
-    put_centered_text(frame, "TRAFFIC STATUS", 170, 115, cv2.FONT_HERSHEY_SIMPLEX, 0.45, COLOR_GRAY, 1)
-    put_centered_text(frame, phase_label, 170, 145, cv2.FONT_HERSHEY_SIMPLEX, 0.65, active_core, 2)
-    
-    # Glowing Light Orb
-    draw_glowing_circle(frame, (170, 240), 50, active_core, active_glow, 3)
-    
-    # Circular phase timeline track
-    phase_pct = max(0.0, min(1.0, phase_time_left / phase_duration))
-    draw_circular_progress(frame, (170, 240), 65, phase_pct, active_core, 4)
-    
-    put_centered_text(frame, f"{phase_time_left:.1f}s left", 170, 335, cv2.FONT_HERSHEY_SIMPLEX, 0.45, COLOR_WHITE, 1)
-    put_centered_text(frame, f"ROUND {len(data_collector.session_data['trials']) + 1}", 170, 365, cv2.FONT_HERSHEY_SIMPLEX, 0.5, COLOR_GRAY, 1)
-
-    # 3. Update summary metrics live and draw Analytics widget
-    data_collector.generate_summary()
-    summary = data_collector.session_data['summary']
-
-    draw_glass_panel(frame, 960, 85, 300, 340, (20, 20, 20), COLOR_INDIGO, 0.5, 1, 15)
-    put_centered_text(frame, "PERFORMANCE ANALYTICS", 1110, 115, cv2.FONT_HERSHEY_SIMPLEX, 0.45, COLOR_GRAY, 1)
-
-    if summary:
-        success_rate = summary.get('success_rate', 100.0)
-        motor_control = summary.get('motor_control_score', 100.0)
-        impulsivity = summary.get('impulsivity_index', 0.0)
-        avg_react = summary.get('avg_reaction_time', 0.0)
-
-        # Success Rate Slider
-        cv2.putText(frame, f"Success Rate: {success_rate:.0f}%", (990, 160), cv2.FONT_HERSHEY_SIMPLEX, 0.4, COLOR_WHITE, 1, cv2.LINE_AA)
-        cv2.rectangle(frame, (990, 172), (1230, 178), (40, 40, 40), -1)
-        cv2.rectangle(frame, (990, 172), (990 + int(success_rate * 2.4), 178), COLOR_EMERALD, -1)
-
-        # Stillness Index (Motor Control)
-        cv2.putText(frame, f"Stillness Rating: {motor_control:.0f}%", (990, 215), cv2.FONT_HERSHEY_SIMPLEX, 0.4, COLOR_WHITE, 1, cv2.LINE_AA)
-        cv2.rectangle(frame, (990, 227), (1230, 233), (40, 40, 40), -1)
-        cv2.rectangle(frame, (990, 227), (990 + int(motor_control * 2.4), 233), COLOR_INDIGO, -1)
-
-        # Impulsivity Score
-        cv2.putText(frame, f"Impulsivity Score: {impulsivity:.0f}%", (990, 270), cv2.FONT_HERSHEY_SIMPLEX, 0.4, COLOR_WHITE, 1, cv2.LINE_AA)
-        cv2.rectangle(frame, (990, 282), (1230, 288), (40, 40, 40), -1)
-        cv2.rectangle(frame, (990, 282), (990 + int(impulsivity * 2.4), 288), COLOR_ROSE, -1)
-
-        # Average Reaction duration
-        cv2.putText(frame, f"Avg Reaction: {avg_react:.2f}s", (990, 325), cv2.FONT_HERSHEY_SIMPLEX, 0.4, COLOR_WHITE, 1, cv2.LINE_AA)
-        cv2.rectangle(frame, (990, 337), (1230, 343), (40, 40, 40), -1)
-        cv2.rectangle(frame, (990, 337), (990 + min(240, int(avg_react * 80)), 343), COLOR_AMBER, -1)
-
-    # 4. Check hover states and draw Center Rounded Interactive Button
-    is_btn_hovered = (button_x <= mouse_pos[0] <= button_x + button_width and button_y <= mouse_pos[1] <= button_y + button_height)
-    btn_border = COLOR_LIGHT_INDIGO if is_btn_hovered else COLOR_INDIGO
-    btn_alpha = 0.75 if is_btn_hovered else 0.5
-
-    draw_glass_panel(frame, button_x, button_y, button_width, button_height, (15, 15, 15), btn_border, btn_alpha, 2 if is_btn_hovered else 1, 15)
-    put_centered_text(frame, button_text, button_x + button_width // 2, button_y + button_height // 2, cv2.FONT_HERSHEY_SIMPLEX, 0.55, COLOR_WHITE, 2)
-
-    # 5. Draw Bottom Real-Time Stillness Sensor visualizer bar
-    draw_motion_visualizer(frame, 20, 630, 1240, 60, motion_magnitude, max_val=max(50.0, md.threshold * 2.5), threshold=md.threshold)
-
-    # Trigger game over on Red Phase violation after exceeding allowed mistakes
-    if motion_detected and current_phase == "red":
-        if current_time - last_mistake_time > 2.0:
-            mistakes_count += 1
-            last_mistake_time = current_time
-            
-            # Log false move for data analytics
-            data_collector.session_data['false_moves'].append({
-                'time': current_time,
-                'reaction_time': current_time - last_color_change_time
-            })
-            
-            # Record last error time in data collector
-            data_collector.last_error_time = current_time
-            data_collector.consecutive_success = 0
-            
-            # Check if game over
-            if mistakes_count > allowed_mistakes:
-                motiond = 1
-                game_over = True
-
-    # Draw live warning flash for 2.0 seconds after mistake
-    if current_time - last_mistake_time < 2.0 and mistakes_count > 0 and not game_over:
-        overlay = frame.copy()
-        cv2.rectangle(overlay, (0, 0), (1280, 720), (0, 0, 100), -1)
-        cv2.addWeighted(overlay, 0.25, frame, 0.75, 0, frame)
-        
-        warning_msg = f"WARNING! YOU MOVED! ({mistakes_count}/{allowed_mistakes + 1})"
-        put_centered_text(frame, warning_msg, 640, 360, cv2.FONT_HERSHEY_SIMPLEX, 1.2, COLOR_ROSE, 3)
-
-    # Check button presses / mouse clicks
-    button_clicked = False
-    if mouse_click_pos is not None:
-        x_click, y_click = mouse_click_pos
-        if (button_x <= x_click <= button_x + button_width and button_y <= y_click <= button_y + button_height):
-            button_clicked = True
-        mouse_click_pos = None
-
-    # Win State Execution Flow
-    if (cv2.waitKey(1) & 0xFF == ord('k')) or button_clicked:
-        # Wrap session metadata
-        data_collector.end_phase(current_phase)
-        data_collector.generate_summary()
-        data_collector.save_data()
-        _send_green_light_to_api(data_collector)
-        
-        # Display Final Overlay
-        while True:
-            draw_end_screen(frame, "WIN", data_collector.session_data['summary'])
-            cv2.imshow('ADHD Training Game', frame)
-            key = cv2.waitKey(1) & 0xFF
-            if key != 255:
-                break
-        end = 1
-        break
-
-    # Lose State Execution Flow
-    if game_over and end == 0:
-        data_collector.end_phase(current_phase)
-        data_collector.generate_summary()
-        data_collector.save_data()
-        _send_green_light_to_api(data_collector)
-        
-        # Display Final Overlay
-        while True:
-            draw_end_screen(frame, "LOSE", data_collector.session_data['summary'])
-            cv2.imshow('ADHD Training Game', frame)
-            key = cv2.waitKey(1) & 0xFF
-            if key != 255:
-                break
-        end = 1
-        break
-
-    cv2.imshow('ADHD Training Game', frame)
-
-    if cv2.waitKey(1) & 0xFF == ord('q'):
-        break
-
-# Final summary prints
-print("\n" + "="*50)
-print("📊 ملخص الجلسة النهائي")
-print("="*50)
-summary = data_collector.session_data['summary']
-for key, value in summary.items():
-    if isinstance(value, float):
-        print(f"{key}: {value:.2f}")
-    else:
-        print(f"{key}: {value}")
-
-cap.release()
-cv2.destroyAllWindows()
+if __name__ == "__main__":
+    import sys
+    child_id = "CHILD001"
+    if len(sys.argv) > 1:
+        child_id = sys.argv[1]
+    game = GreenLightGame(child_id=child_id)
+    game.run()
