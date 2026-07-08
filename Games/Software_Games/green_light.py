@@ -429,6 +429,39 @@ class GameDataCollector:
             json.dump(output, f, indent=2, ensure_ascii=False)
         
         print(f"\nData saved to: {json_filename}")
+
+        # API SYNC
+        try:
+            from backend_api import create_session, save_green_light_trials, save_summary
+            print("Syncing Red Light Green Light session data to backend API...")
+            api_session_id = create_session(self.child_id, "RedLightGreenLight")
+            if api_session_id:
+                api_trials = []
+                for t in export_trials:
+                    api_trials.append({
+                        "TrialIndex": t["trialIndex"],
+                        "Phase": t["phase"],
+                        "StopSignalDelayMs": t["stopSignalDelayMs"],
+                        "MovementIntensity": t["movementIntensity"],
+                        "StopReactionTimeMs": t["transition"]["stopReactionTimeMs"],
+                        "FreezeQuality": t["transition"]["freezeQuality"],
+                        "FalseStart": t["transition"]["falseStart"]
+                    })
+                save_green_light_trials(api_session_id, api_trials)
+                
+                api_summary = {
+                    "TotalTrials": output["sessionSummary"]["totalTrials"],
+                    "AverageStopReactionTimeMs": output["sessionSummary"]["averageStopReactionTimeMs"],
+                    "FalseStartCount": output["sessionSummary"]["falseStartCount"],
+                    "AverageFreezeQuality": output["sessionSummary"]["averageFreezeQuality"],
+                    "MovementIntensityOverall": output["sessionSummary"]["movementIntensityOverall"]
+                }
+                save_summary(api_session_id, api_summary)
+                print("✅ Sync with API completed successfully!")
+            else:
+                print("❌ Could not create session on API.")
+        except Exception as e:
+            print(f"❌ Error syncing with API: {e}")
         
         return json_filename
 

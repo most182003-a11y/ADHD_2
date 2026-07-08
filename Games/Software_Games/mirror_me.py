@@ -1163,6 +1163,40 @@ class MirrorMeGame:
                 json.dump(output, f, indent=2, ensure_ascii=False)
             print(f"✅ Mirror Me session data saved to {json_filename}")
 
+            # API SYNC
+            try:
+                from backend_api import create_session, save_mirror_me_trials, save_summary
+                print("Syncing Mirror Me session data to backend API...")
+                api_session_id = create_session(self.child_id, "MirrorMe")
+                if api_session_id:
+                    api_trials = []
+                    for t in self.trial_results:
+                        api_trials.append({
+                            "TrialIndex": int(t["trialIndex"]),
+                            "TargetPoseId": str(t["targetPoseId"]),
+                            "ReactionTimeMs": int(t["reactionTimeMs"]),
+                            "PoseSimilarity": float(t["poseSimilarity"]),
+                            "HoldingDurationMs": int(t["holdingDurationMs"]),
+                            "FidgetScore": float(t["fidgetScore"]),
+                            "PrematureMovement": bool(t["prematureMovement"]),
+                            "AttentionPercent": float(t["attentionPercent"])
+                        })
+                    save_mirror_me_trials(api_session_id, api_trials)
+                    
+                    api_summary = {
+                        "TotalTrials": int(self.total_rounds),
+                        "AverageReactionTimeMs": float(round(avg_react * 1000, 0)),
+                        "AverageSimilarity": float(round(avg_similarity, 2)),
+                        "TotalFidgetScore": float(round(avg_fidget, 2)),
+                        "AttentionOverall": float(round(avg_attention, 2))
+                    }
+                    save_summary(api_session_id, api_summary)
+                    print("✅ Sync with API completed successfully!")
+                else:
+                    print("❌ Could not create session on API.")
+            except Exception as e:
+                print(f"❌ Error syncing with API: {e}")
+
             self.session_saved = True
 
         draw_glass_panel(frame, 50, 30, 1180, 660, (10, 10, 10), COLOR_INDIGO, 0.75, 2, 20)
