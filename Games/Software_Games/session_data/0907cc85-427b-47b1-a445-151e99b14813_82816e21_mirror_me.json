@@ -1,0 +1,66 @@
+{
+  "userId": "0907cc85-427b-47b1-a445-151e99b14813",
+  "sessionId": "82816e21",
+  "gameType": "mirror_me",
+  "timestamp": "2026-07-08T22:45:16.598302",
+  "previousSessionsCount": 0,
+  "trials": [
+    {
+      "trialIndex": 1,
+      "targetPoseId": "pose-1",
+      "reactionTimeMs": 2625.0,
+      "poseSimilarity": 0.78,
+      "holdingDurationMs": 2526.0,
+      "fidgetScore": 0.0,
+      "prematureMovement": true,
+      "attentionPercent": 1.0
+    },
+    {
+      "trialIndex": 2,
+      "targetPoseId": "pose-2",
+      "reactionTimeMs": 2531.0,
+      "poseSimilarity": 0.92,
+      "holdingDurationMs": 2518.0,
+      "fidgetScore": 0.01,
+      "prematureMovement": true,
+      "attentionPercent": 1.0
+    },
+    {
+      "trialIndex": 3,
+      "targetPoseId": "pose-3",
+      "reactionTimeMs": 2572.0,
+      "poseSimilarity": 1.0,
+      "holdingDurationMs": 2510.0,
+      "fidgetScore": 0.24,
+      "prematureMovement": true,
+      "attentionPercent": 1.0
+    },
+    {
+      "trialIndex": 4,
+      "targetPoseId": "pose-4",
+      "reactionTimeMs": 2530.0,
+      "poseSimilarity": 1.0,
+      "holdingDurationMs": 2518.0,
+      "fidgetScore": 0.0,
+      "prematureMovement": true,
+      "attentionPercent": 1.0
+    },
+    {
+      "trialIndex": 5,
+      "targetPoseId": "pose-5",
+      "reactionTimeMs": 2548.0,
+      "poseSimilarity": 1.0,
+      "holdingDurationMs": 2535.0,
+      "fidgetScore": 0.0,
+      "prematureMovement": true,
+      "attentionPercent": 1.0
+    }
+  ],
+  "sessionSummary": {
+    "averageReactionTimeMs": 2561.0,
+    "averageSimilarity": 0.94,
+    "totalFidgetScore": 0.05,
+    "attentionOverall": 1.0,
+    "totalTrials": 5
+  }
+}

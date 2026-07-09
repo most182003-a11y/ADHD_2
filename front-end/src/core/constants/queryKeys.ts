@@ -18,5 +18,10 @@ export const queryKeys = {
   games: {
     all: ['games'] as const,
     list: () => [...queryKeys.games.all, 'list'] as const,
+  },
+  analyses: {
+    all: ['analyses'] as const,
+    byChild: (childId?: string) => [...queryKeys.analyses.all, 'child', childId || 'none'] as const,
+    bySession: (sessionId?: string) => [...queryKeys.analyses.all, 'session', sessionId || 'none'] as const,
   }
 } as const;

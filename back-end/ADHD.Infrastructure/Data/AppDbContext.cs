@@ -18,6 +18,7 @@ namespace ADHD.Infrastructure.Data
         public DbSet<SimonTrial> SimonTrials { get; set; }
         public DbSet<ReactionTrial> ReactionTrials { get; set; }
         public DbSet<SessionSummary> SessionSummaries { get; set; }
+        public DbSet<AIAnalysis> AIAnalyses { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -82,6 +83,11 @@ namespace ADHD.Infrastructure.Data
                     .HasForeignKey<SessionSummary>(s => s.SessionId)
                     .OnDelete(DeleteBehavior.Cascade);
 
+                entity.HasOne(e => e.AIAnalysis)
+                    .WithOne(a => a.Session)
+                    .HasForeignKey<AIAnalysis>(a => a.SessionId)
+                    .OnDelete(DeleteBehavior.Cascade);
+
                 entity.HasIndex(e => new { e.ChildId, e.GameType });
             });
 
@@ -133,6 +139,18 @@ namespace ADHD.Infrastructure.Data
                 entity.HasOne(e => e.Session)
                     .WithOne(s => s.Summary)
                     .HasForeignKey<SessionSummary>(e => e.SessionId);
+
+                entity.HasIndex(e => e.SessionId).IsUnique();
+            });
+
+            modelBuilder.Entity<AIAnalysis>(entity =>
+            {
+                entity.ToTable("ai_analyses");
+                entity.HasKey(e => e.Id);
+
+                entity.HasOne(e => e.Session)
+                    .WithOne(s => s.AIAnalysis)
+                    .HasForeignKey<AIAnalysis>(e => e.SessionId);
 
                 entity.HasIndex(e => e.SessionId).IsUnique();
             });
