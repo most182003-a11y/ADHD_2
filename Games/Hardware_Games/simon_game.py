@@ -1,8 +1,15 @@
+import os
 import sys
+
+# Add parent directory to sys.path to find backend_api.py
+_script_dir = os.path.dirname(os.path.abspath(__file__))
+_games_dir = os.path.dirname(_script_dir)  # Games/
+if _games_dir not in sys.path:
+    sys.path.insert(0, _games_dir)
+
 import time
 import random
 import json
-import os
 import board
 import neopixel
 import RPi.GPIO as GPIO

@@ -22,3 +22,40 @@
 [2026-07-08 20:30:55] 2 Green Light trials saved to session b45e7037-ddff-44d8-9f0c-7579f9663664
 [2026-07-08 20:30:55] OK /api/sessions/b45e7037-ddff-44d8-9f0c-7579f9663664/summary (attempt 1) -> 200
 [2026-07-08 20:30:55] Summary saved for session b45e7037-ddff-44d8-9f0c-7579f9663664
+[2026-07-08 21:07:46] FAIL /api/sessions (attempt 1/3): HTTPConnectionPool(host='localhost', port=5131): Max retries exceeded with url: /api/sessions (Caused by NewConnectionError("HTTPConnection(host='localhost', port=5131): Failed to establish a new connection: [WinError 10061] No connection could be made because the target machine actively refused it"))
+[2026-07-08 21:07:48] OK /api/sessions (attempt 2) -> 200
+[2026-07-08 21:07:48] Session created: f659dc24-bf33-4073-8ebd-e618202b12b1 (child=0907cc85-427b-47b1-a445-151e99b14813, game=MirrorMe)
+[2026-07-08 21:07:48] OK /api/sessions/f659dc24-bf33-4073-8ebd-e618202b12b1/mirror-me-trials (attempt 1) -> 200
+[2026-07-08 21:07:48] 5 Mirror Me trials saved to session f659dc24-bf33-4073-8ebd-e618202b12b1
+[2026-07-08 21:07:49] OK /api/sessions/f659dc24-bf33-4073-8ebd-e618202b12b1/summary (attempt 1) -> 200
+[2026-07-08 21:07:49] Summary saved for session f659dc24-bf33-4073-8ebd-e618202b12b1
+[2026-07-08 22:46:08] OK /api/sessions (attempt 1) -> 200
+[2026-07-08 22:46:08] Session created: 27aaddc3-7052-49c4-9c68-a645311f10ad (child=0907cc85-427b-47b1-a445-151e99b14813, game=MirrorMe)
+[2026-07-08 22:46:08] OK /api/sessions/27aaddc3-7052-49c4-9c68-a645311f10ad/mirror-me-trials (attempt 1) -> 200
+[2026-07-08 22:46:08] 5 Mirror Me trials saved to session 27aaddc3-7052-49c4-9c68-a645311f10ad
+[2026-07-08 22:46:08] OK /api/sessions/27aaddc3-7052-49c4-9c68-a645311f10ad/summary (attempt 1) -> 200
+[2026-07-08 22:46:08] Summary saved for session 27aaddc3-7052-49c4-9c68-a645311f10ad
+[2026-07-08 22:49:26] OK /api/sessions (attempt 1) -> 200
+[2026-07-08 22:49:26] Session created: c758d1a6-ed13-448b-8cbb-061c0d96ae9f (child=0907cc85-427b-47b1-a445-151e99b14813, game=MirrorMe)
+[2026-07-08 22:49:26] OK /api/sessions/c758d1a6-ed13-448b-8cbb-061c0d96ae9f/mirror-me-trials (attempt 1) -> 200
+[2026-07-08 22:49:26] 5 Mirror Me trials saved to session c758d1a6-ed13-448b-8cbb-061c0d96ae9f
+[2026-07-08 22:49:26] OK /api/sessions/c758d1a6-ed13-448b-8cbb-061c0d96ae9f/summary (attempt 1) -> 200
+[2026-07-08 22:49:26] Summary saved for session c758d1a6-ed13-448b-8cbb-061c0d96ae9f
+[2026-07-08 23:10:55] OK /api/sessions (attempt 1) -> 200
+[2026-07-08 23:10:55] Session created: e4e2ee41-53e0-4506-bc97-9cbefceb6679 (child=0907cc85-427b-47b1-a445-151e99b14813, game=MirrorMe)
+[2026-07-08 23:10:55] OK /api/sessions/e4e2ee41-53e0-4506-bc97-9cbefceb6679/mirror-me-trials (attempt 1) -> 200
+[2026-07-08 23:10:55] 5 Mirror Me trials saved to session e4e2ee41-53e0-4506-bc97-9cbefceb6679
+[2026-07-08 23:10:55] OK /api/sessions/e4e2ee41-53e0-4506-bc97-9cbefceb6679/summary (attempt 1) -> 200
+[2026-07-08 23:10:55] Summary saved for session e4e2ee41-53e0-4506-bc97-9cbefceb6679
+[2026-07-08 23:14:17] OK /api/sessions (attempt 1) -> 200
+[2026-07-08 23:14:17] Session created: 4c24e2a4-5b4e-4fa4-9889-f04ebb7db659 (child=0907cc85-427b-47b1-a445-151e99b14813, game=MirrorMe)
+[2026-07-08 23:14:17] OK /api/sessions/4c24e2a4-5b4e-4fa4-9889-f04ebb7db659/mirror-me-trials (attempt 1) -> 200
+[2026-07-08 23:14:17] 5 Mirror Me trials saved to session 4c24e2a4-5b4e-4fa4-9889-f04ebb7db659
+[2026-07-08 23:14:17] OK /api/sessions/4c24e2a4-5b4e-4fa4-9889-f04ebb7db659/summary (attempt 1) -> 200
+[2026-07-08 23:14:17] Summary saved for session 4c24e2a4-5b4e-4fa4-9889-f04ebb7db659
+[2026-07-08 23:19:24] OK /api/sessions (attempt 1) -> 200
+[2026-07-08 23:19:24] Session created: e7780fc4-96ac-4867-9b44-b396287212f9 (child=0907cc85-427b-47b1-a445-151e99b14813, game=MirrorMe)
+[2026-07-08 23:19:24] OK /api/sessions/e7780fc4-96ac-4867-9b44-b396287212f9/mirror-me-trials (attempt 1) -> 200
+[2026-07-08 23:19:24] 5 Mirror Me trials saved to session e7780fc4-96ac-4867-9b44-b396287212f9
+[2026-07-08 23:19:24] OK /api/sessions/e7780fc4-96ac-4867-9b44-b396287212f9/summary (attempt 1) -> 200
+[2026-07-08 23:19:24] Summary saved for session e7780fc4-96ac-4867-9b44-b396287212f9

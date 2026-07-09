@@ -10,7 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import SectionCard from "@/components/SectionCard";
 import StatCard from "@/components/StatCard";
 import { cn } from "@/lib/utils";
-import { useChildren, useSessions, useDoctors } from "@/hooks/useApiData";
+import { useChildren, useSessions, useDoctors, useChildAnalyses } from "@/hooks/useApiData";
 import { Skeleton } from "@/components/ui/skeleton";
 import { targets } from "@/lib/data-utils";
 import { useToast } from "@/hooks/use-toast";
@@ -21,6 +21,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { formatDoctorName } from '@/core/utils/formatters';
 import { CustomTooltip } from "@/shared/components/data-display/CustomTooltip";
+import AIInsightsCard from "./components/AIInsightsCard";
 
 const MetricBadge = ({ value, target, unit = "", higherBetter = true }: { value: number, target: number, unit?: string, higherBetter?: boolean }) => {
   const good = higherBetter ? value >= target : value <= target;
@@ -58,6 +59,7 @@ export function ChildAnalyticsPage() {
   }, [children, selectedId]);
 
   const { sessions, loading: loadingSessions } = useSessions(selectedId || undefined);
+  const { analyses: childAnalyses, loading: loadingAnalyses } = useChildAnalyses(selectedId || undefined);
 
   const child = useMemo(() => children.find(c => c.id === selectedId), [children, selectedId]);
 
@@ -115,6 +117,41 @@ export function ChildAnalyticsPage() {
   };
 
   const lastSession = sessions.length > 0 ? sessions[0] : null;
+
+  const lastSessionAnalysis = useMemo(() => {
+    if (!lastSession || !childAnalyses) return null;
+    const found = childAnalyses.find(a => a.sessionId === lastSession.sessionInfo.sessionId);
+    if (found) {
+      let recommendations: string[] | null = null;
+      if (found.recommendations) {
+        try {
+          recommendations = JSON.parse(found.recommendations);
+        } catch {
+          recommendations = null;
+        }
+      }
+      return {
+        ...found,
+        recommendations
+      } as any;
+    }
+    if (childAnalyses.length > 0) {
+      const latest = childAnalyses[0];
+      let recommendations: string[] | null = null;
+      if (latest.recommendations) {
+        try {
+          recommendations = JSON.parse(latest.recommendations);
+        } catch {
+          recommendations = null;
+        }
+      }
+      return {
+        ...latest,
+        recommendations
+      } as any;
+    }
+    return null;
+  }, [lastSession, childAnalyses]);
 
   const chartData = useMemo(() =>
     sessions.map((s, i) => ({
@@ -321,6 +358,9 @@ export function ChildAnalyticsPage() {
         <StatCard title="مؤشر الاندفاعية" value={`${lastSession.summary.impulsivity_index.toFixed(1)}`} subtitle="المؤشر (الأقل أفضل)" icon={<Zap size={18} />} variant="amber" />
         <StatCard title="زمن الاستجابة" value={`${(lastSession.summary.avg_reaction_time * 1000).toFixed(0)} ملي ثانية`} subtitle="متوسط سرعة البديهة" icon={<Clock size={18} />} variant="info" />
       </div>
+
+      {/* AI Analysis & Recommendations */}
+      <AIInsightsCard analysis={lastSessionAnalysis} loading={loadingAnalyses} />
 
       {/* Multi-line Chart */}
       <SectionCard title="تقدم الحالة عبر الجلسات" subtitle="مؤشرات الأداء الرئيسية عبر كافة الجلسات">

@@ -1,0 +1,26 @@
+{
+  "id": "orLHeXK-4YNCb4-a1818ee41ccc3940",
+  "object": "chat.completion",
+  "created": 1783539600,
+  "model": "Qwen/Qwen2.5-7B-Instruct-Turbo",
+  "prompt": [],
+  "choices": [
+    {
+      "finish_reason": "stop",
+      "seed": 13197623707106394000,
+      "index": 0,
+      "logprobs": null,
+      "message": {
+        "role": "assistant",
+        "content": "{\n  \"scores\": {\n    \"attention\": 85,\n    \"impulsivity\": 18,\n    \"motorControl\": 75\n  },\n  \"trend\": {\n    \"attentionChange\": \"+5%\",\n    \"impulsivityChange\": \"-10%\",\n    \"motorControlChange\": \"-20%\"\n  },\n  \"summaryText\": \"تحسن في الانتباه ولكن هناك زيادة في الاندفاعية وانخفاض في السيطرة الحركية.\",\n  \"recommendations\": [\n    \"تعزيز التمارين التي تركز على الانتباه.\",\n    \"تطبيق استراتيجيات لتقليل الاندفاعية.\",\n    \"تشجيع التمارين التي تحسن السيطرة الحركية.\"\n  ]\n}",
+        "tool_calls": []
+      }
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 565,
+    "completion_tokens": 159,
+    "total_tokens": 724,
+    "cached_tokens": 0
+  }
+}
