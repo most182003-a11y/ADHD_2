@@ -1,0 +1,24 @@
+# API response dumps
+hf_analysis_response.json
+hf_response.json
+
+# User Secrets / local overrides
+ADHD.API/appsettings.Development.json
+ADHD.API/appsettings.json.user
+*.user
+
+# Build output
+bin/
+obj/
+[Dd]ebug/
+[Rr]elease/
+
+# IDE
+.vs/
+.idea/
+*.suo
+*.sln.docstates
+
+# OS
+.DS_Store
+Thumbs.db
