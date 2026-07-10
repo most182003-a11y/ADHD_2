@@ -16,7 +16,7 @@ export const RegisterDoctorForm = ({ onSuccess }: RegisterDoctorFormProps) => {
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const [loadingSubmit, setLoadingSubmit] = useState(false);
-  
+
   const [doctorForm, setDoctorForm] = useState({
     name: "",
     email: "",
@@ -119,7 +119,7 @@ export const RegisterDoctorForm = ({ onSuccess }: RegisterDoctorFormProps) => {
         <label className="text-xs font-semibold text-muted-foreground">رقم الهاتف</label>
         <Input
           required
-          placeholder="مثال: +966 50 000 0000"
+          placeholder="مثال: +201012345678"
           value={doctorForm.phoneNumber}
           onChange={e => setDoctorForm({ ...doctorForm, phoneNumber: e.target.value })}
           className="text-right"

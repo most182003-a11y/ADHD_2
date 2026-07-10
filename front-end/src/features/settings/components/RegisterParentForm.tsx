@@ -46,7 +46,7 @@ export const RegisterParentForm = ({ onSuccess }: RegisterParentFormProps) => {
       });
 
       setParentForm({ name: "", email: "", password: "", phoneNumber: "" });
-      
+
       queryClient.invalidateQueries({ queryKey: queryKeys.parents.list() });
       if (onSuccess) onSuccess();
     } catch (err: any) {
@@ -107,7 +107,7 @@ export const RegisterParentForm = ({ onSuccess }: RegisterParentFormProps) => {
           <label className="text-xs font-semibold text-muted-foreground">رقم الهاتف</label>
           <Input
             required
-            placeholder="مثال: +966 50 000 0000"
+            placeholder="مثال: +201012345678"
             value={parentForm.phoneNumber}
             onChange={e => setParentForm({ ...parentForm, phoneNumber: e.target.value })}
             className="text-right"

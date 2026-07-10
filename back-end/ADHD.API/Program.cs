@@ -75,7 +75,7 @@ using (var scope = app.Services.CreateScope())
             Email = adminEmail,
             EmailConfirmed = true
         };
-        var result = userManager.CreateAsync(adminUser, "Admin@123").GetAwaiter().GetResult();
+        var result = userManager.CreateAsync(adminUser, "admin@123").GetAwaiter().GetResult();
         if (result.Succeeded)
         {
             userManager.AddToRoleAsync(adminUser, "Admin").GetAwaiter().GetResult();
