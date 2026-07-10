@@ -147,10 +147,17 @@ export function GamesCatalogPage() {
                               </div>
                               <div className="flex flex-col text-right">
                                 <span>{game.name}</span>
-                                <span className="text-[10px] text-amber-600 bg-amber-50/50 border border-amber-100 rounded-full px-2 py-0.5 w-fit mt-1 font-semibold flex items-center gap-1">
-                                  <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
-                                  غير مربوطة بالباك اند (تشغيل محلي)
-                                </span>
+                                {game.isActive ? (
+                                  <span className="text-[10px] text-emerald-600 bg-emerald-50/50 border border-emerald-100 rounded-full px-2 py-0.5 w-fit mt-1 font-semibold flex items-center gap-1">
+                                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                                    مربوطة بالخادم (نشطة)
+                                  </span>
+                                ) : (
+                                  <span className="text-[10px] text-slate-500 bg-slate-50/50 border border-slate-200 rounded-full px-2 py-0.5 w-fit mt-1 font-semibold flex items-center gap-1">
+                                    <span className="w-1.5 h-1.5 rounded-full bg-slate-400" />
+                                    غير نشطة حالياً
+                                  </span>
+                                )}
                               </div>
                             </div>
                           </TableCell>
@@ -216,15 +223,27 @@ export function GamesCatalogPage() {
 
             <div className="py-4 space-y-4 text-right" dir="rtl">
               {/* Connection Status Banner */}
-              <div className="bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200/85 rounded-xl p-3 flex items-start gap-3 text-right">
-                <Info className="w-5 h-5 text-amber-600 mt-0.5 flex-shrink-0" />
-                <div className="space-y-1">
-                  <h4 className="font-bold text-amber-800 text-sm">حالة الاتصال والربط بالخادم</h4>
-                  <p className="text-xs text-amber-700 leading-relaxed">
-                    هذه اللعبة تعمل بشكل أوفلاين/محلي على الجهاز الملحق ولا تدعم إرسال التقارير التلقائية إلى الباك اند حالياً. يتم تسجيل الجلسات وتخزينها محلياً فقط.
-                  </p>
+              {selectedGame.isActive ? (
+                <div className="bg-gradient-to-r from-emerald-50 to-teal-50 border border-emerald-200/85 rounded-xl p-3 flex items-start gap-3 text-right">
+                  <Activity className="w-5 h-5 text-emerald-600 mt-0.5 flex-shrink-0" />
+                  <div className="space-y-1">
+                    <h4 className="font-bold text-emerald-800 text-sm">حالة الاتصال والربط بالخادم</h4>
+                    <p className="text-xs text-emerald-700 leading-relaxed">
+                      هذه اللعبة متصلة بالكامل بالخادم الخلفي (Backend). يتم تسجيل جلسات اللعب ومحاولات الطفل وإرسالها فورياً لحساب الطبيب أو ولي الأمر، وتوليد تقارير الذكاء الاصطناعي تلقائياً.
+                    </p>
+                  </div>
                 </div>
-              </div>
+              ) : (
+                <div className="bg-gradient-to-r from-slate-50 to-slate-100 border border-slate-200 rounded-xl p-3 flex items-start gap-3 text-right">
+                  <Info className="w-5 h-5 text-slate-500 mt-0.5 flex-shrink-0" />
+                  <div className="space-y-1">
+                    <h4 className="font-bold text-slate-700 text-sm">حالة الاتصال والربط بالخادم</h4>
+                    <p className="text-xs text-slate-600 leading-relaxed">
+                      هذه اللعبة تحت التطوير حالياً وغير مفعلة على هذا الإصدار من النظام.
+                    </p>
+                  </div>
+                </div>
+              )}
 
               {/* Description */}
               <div className="space-y-1.5">

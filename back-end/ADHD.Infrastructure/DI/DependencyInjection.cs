@@ -29,6 +29,11 @@ namespace ADHD.Infrastructure.DI
             services.AddIdentity<AppUser, IdentityRole>(options =>
             {
                 options.User.AllowedUserNameCharacters = ""; // Allow all characters (Arabic, spaces, etc.) in username
+                options.Password.RequireUppercase = false;
+                options.Password.RequireLowercase = false;
+                options.Password.RequireNonAlphanumeric = false;
+                options.Password.RequireDigit = false;
+                options.Password.RequiredLength = 3;
             })
                 .AddEntityFrameworkStores<AppDbContext>()
                 .AddDefaultTokenProviders();
